@@ -7,7 +7,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { cn } from "@/lib/utils";
 import { useActiveOrg } from "@/hooks/use-active-org";
-import { useOrgSettings } from "@/hooks/use-cloud";
+import { useOrgSettings, useSession } from "@/hooks/use-cloud";
 
 /** Loads the active organization's defaults (currency, timezone) once per session. */
 function WorkspaceDefaults() {
@@ -19,6 +19,12 @@ function WorkspaceDefaults() {
 export function AppShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user } = useSession();
+  const { activeOrg } = useActiveOrg();
+
+  const sidebarFooter = user && activeOrg
+    ? activeOrg.name
+    : "Demo workspace · mock data";
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-background">
@@ -33,7 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarNav collapsed={collapsed} />
         {!collapsed ? (
           <div className="border-t px-4 py-3 text-[11px] text-muted-foreground">
-            Demo workspace · mock data
+            {sidebarFooter}
           </div>
         ) : null}
       </aside>

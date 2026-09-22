@@ -3,7 +3,7 @@ import { ORG_ROLE_TO_ROLE_NAME, ROLE_PERMISSIONS, type Permission } from "@/lib/
 import { organizations, roles, users } from "@/lib/mock/seed";
 import { CURRENT_USER_ID, DEFAULT_ORG_ID } from "@/services/store";
 import { useActiveOrg } from "@/hooks/use-active-org";
-import { useSession, useMyProfile, useMyMembership } from "@/hooks/use-cloud";
+import { useSession, useMyProfile, useMyMembership, type CloudOrganization } from "@/hooks/use-cloud";
 import type { Organization, User } from "@/lib/types";
 
 interface WorkspaceValue {
@@ -109,10 +109,50 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const permissions = useMemo(() => ROLE_PERMISSIONS[roleName] ?? [], [roleName]);
   const can = useCallback((permission: Permission) => permissions.includes(permission), [permissions]);
 
+  const { activeOrg, orgs: liveOrgs } = useActiveOrg();
+
+  // Build organization list: prefer live Supabase orgs when authenticated
+  const liveOrganizations: Organization[] = useMemo(
+    () =>
+      liveOrgs.map((o: CloudOrganization) => ({
+        id: o.id,
+        name: o.name,
+        slug: o.slug,
+        logo_url: o.logo_url ?? null,
+        owner_user_id: o.owner_id ?? "",
+        plan: "Professional" as const,
+        billing_email: "",
+        max_members: 100,
+        created_at: o.created_at ?? "",
+        updated_at: o.updated_at ?? "",
+      })),
+    [liveOrgs],
+  );
+
+  const resolvedOrganization = useMemo<Organization>(() => {
+    if (activeOrg) {
+      return {
+        id: activeOrg.id,
+        name: activeOrg.name,
+        slug: activeOrg.slug,
+        logo_url: activeOrg.logo_url ?? null,
+        owner_user_id: activeOrg.owner_id ?? "",
+        plan: "Professional" as const,
+        billing_email: "",
+        max_members: 100,
+        created_at: activeOrg.created_at ?? "",
+        updated_at: activeOrg.updated_at ?? "",
+      };
+    }
+    return organizations.find((o) => o.id === organizationId) ?? organizations[0];
+  }, [activeOrg, organizationId]);
+
+  const resolvedOrganizations = liveOrganizations.length > 0 ? liveOrganizations : organizations;
+
   const value = useMemo<WorkspaceValue>(
     () => ({
-      organization: organizations.find((o) => o.id === organizationId) ?? organizations[0],
-      organizations,
+      organization: resolvedOrganization,
+      organizations: resolvedOrganizations,
       setOrganizationId,
       currentUser,
       updateCurrentUser,
@@ -122,7 +162,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       permissions,
       can,
     }),
-    [organizationId, currentUser, updateCurrentUser, roleName, liveRoleName, permissions, can],
+    [resolvedOrganization, resolvedOrganizations, currentUser, updateCurrentUser, roleName, liveRoleName, permissions, can],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
@@ -139,10 +179,18 @@ export function usePermissions() {
   return { can, permissions, roleName, roleIsLive };
 }
 
-export function useOrgId() {
+export function useOrgId(): string {
   const { activeOrgId } = useActiveOrg();
+  const { user } = useSession();
   const ws = useWorkspace();
-  // Prefer the live Supabase org (from useActiveOrg) when available;
-  // fall back to the demo workspace org for unauthenticated / mock mode.
+
+  // When the user is signed in, ONLY use the real Supabase org ID.
+  // Never fall back to the mock "org_001" — that would cause every
+  // write to be silently rejected by RLS.
+  if (user) {
+    return activeOrgId ?? "";
+  }
+
+  // Unauthenticated demo mode — use the mock org for the landing page.
   return activeOrgId ?? ws.organization.id;
 }

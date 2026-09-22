@@ -3,7 +3,10 @@ import { services } from "@/services";
 import { useOrgId, useWorkspace } from "@/app/workspace";
 import type { DailyWorkUpdate, FileRecord, Lead, LeaveRequest, Payment, Project, Task } from "@/lib/types";
 
-/** Feature hooks — the only layer components talk to. */
+/** Throw early when the org ID hasn't resolved yet (avoids silent RLS failures). */
+function requireOrg(org: string): asserts org is string {
+  if (!org) throw new Error("No organization selected. Please create or join a workspace first.");
+}
 
 export function useProjects() {
   const org = useOrgId();
@@ -40,8 +43,10 @@ export function useUpdateTask() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: Partial<Task> }) =>
-      services.tasks.updateTask(org, id, input),
+    mutationFn: ({ id, input }: { id: string; input: Partial<Task> }) => {
+      requireOrg(org);
+      return services.tasks.updateTask(org, id, input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
   });
 }
@@ -50,7 +55,10 @@ export function useCreateTask() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Partial<Task>) => services.tasks.createTask(org, input),
+    mutationFn: (input: Partial<Task>) => {
+      requireOrg(org);
+      return services.tasks.createTask(org, input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
   });
 }
@@ -59,7 +67,10 @@ export function useCreateProject() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Partial<Project>) => services.projects.createProject(org, input),
+    mutationFn: (input: Partial<Project>) => {
+      requireOrg(org);
+      return services.projects.createProject(org, input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
   });
 }
@@ -101,8 +112,10 @@ export function useUpdateDeal() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, stage }: { id: string; stage: string }) =>
-      services.crm.updateDeal(org, id, { stage: stage as never }),
+    mutationFn: ({ id, stage }: { id: string; stage: string }) => {
+      requireOrg(org);
+      return services.crm.updateDeal(org, id, { stage: stage as never });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["deals"] }),
   });
 }
@@ -207,7 +220,10 @@ export function useUploadFile() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Partial<FileRecord>) => services.files.uploadFile(org, input),
+    mutationFn: (input: Partial<FileRecord>) => {
+      requireOrg(org);
+      return services.files.uploadFile(org, input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["files"] }),
   });
 }
@@ -216,7 +232,10 @@ export function useDeleteFile() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => services.files.deleteFile(org, id),
+    mutationFn: (id: string) => {
+      requireOrg(org);
+      return services.files.deleteFile(org, id);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["files"] }),
   });
 }
@@ -296,7 +315,10 @@ export function useConvertLead() {
     }: {
       id: string;
       options: { createClient: boolean; createProject: boolean; templateId?: string; managerId?: string };
-    }) => services.crm.convertLead(org, id, options),
+    }) => {
+      requireOrg(org);
+      return services.crm.convertLead(org, id, options);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -309,7 +331,10 @@ export function useUpdateLead() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: Partial<Lead> }) => services.crm.updateLead(org, id, input),
+    mutationFn: ({ id, input }: { id: string; input: Partial<Lead> }) => {
+      requireOrg(org);
+      return services.crm.updateLead(org, id, input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["leads"] }),
   });
 }
@@ -318,7 +343,10 @@ export function useCreateLead() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Partial<Lead>) => services.crm.createLead(org, input),
+    mutationFn: (input: Partial<Lead>) => {
+      requireOrg(org);
+      return services.crm.createLead(org, input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["leads"] }),
   });
 }
@@ -328,8 +356,10 @@ export function useSendChatMessage() {
   const { currentUser } = useWorkspace();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ roomId, body }: { roomId: string; body: string }) =>
-      services.communication.sendChatMessage(org, roomId, currentUser.id, body),
+    mutationFn: ({ roomId, body }: { roomId: string; body: string }) => {
+      requireOrg(org);
+      return services.communication.sendChatMessage(org, roomId, currentUser.id, body);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages"] }),
   });
 }
@@ -338,8 +368,10 @@ export function useToggleWorkflow() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      services.automation.toggleWorkflow(org, id, enabled),
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => {
+      requireOrg(org);
+      return services.automation.toggleWorkflow(org, id, enabled);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workflows"] }),
   });
 }
@@ -348,7 +380,10 @@ export function useRetrySchedule() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => services.marketing.retrySchedule(org, id),
+    mutationFn: (id: string) => {
+      requireOrg(org);
+      return services.marketing.retrySchedule(org, id);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["scheduled"] }),
   });
 }
@@ -357,7 +392,10 @@ export function useRecordPayment() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Partial<Payment>) => services.business.recordPayment(org, input),
+    mutationFn: (input: Partial<Payment>) => {
+      requireOrg(org);
+      return services.business.recordPayment(org, input);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payments"] });
       qc.invalidateQueries({ queryKey: ["invoices"] });
@@ -369,7 +407,10 @@ export function useCreateLeaveRequest() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Partial<LeaveRequest>) => services.people.createLeaveRequest(org, input),
+    mutationFn: (input: Partial<LeaveRequest>) => {
+      requireOrg(org);
+      return services.people.createLeaveRequest(org, input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["leave"] }),
   });
 }
@@ -378,8 +419,10 @@ export function useUpdateLeaveRequest() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: Partial<LeaveRequest> }) =>
-      services.people.updateLeaveRequest(org, id, input),
+    mutationFn: ({ id, input }: { id: string; input: Partial<LeaveRequest> }) => {
+      requireOrg(org);
+      return services.people.updateLeaveRequest(org, id, input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["leave"] }),
   });
 }
@@ -388,7 +431,10 @@ export function useCreateDailyUpdate() {
   const org = useOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Partial<DailyWorkUpdate>) => services.people.createDailyUpdate(org, input),
+    mutationFn: (input: Partial<DailyWorkUpdate>) => {
+      requireOrg(org);
+      return services.people.createDailyUpdate(org, input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["daily-updates"] }),
   });
 }
