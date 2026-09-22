@@ -1,4 +1,4 @@
-﻿import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { LayoutGrid, Plus, Rows3 } from "lucide-react";
 import { toast } from "sonner";
@@ -231,25 +231,40 @@ function NewProjectDrawer() {
       description="Projects group tasks, milestones, files and billing for a client."
       submitLabel="Create project"
       onSubmit={() => {
-        if (!form.name.trim() || !form.client_name.trim()) {
-          setError("Project name and client are required.");
+        if (!form.name.trim()) {
+          setError("Project name is required.");
           return false;
         }
-        const selectedClient = clients.find((client) => client.company.toLowerCase() === form.client_name.trim().toLowerCase());
-        const selectedManager = users.find((user) => user.full_name.toLowerCase() === form.manager_name.trim().toLowerCase());
+        const clientTrimmed = form.client_name.trim();
+        const selectedClient = clientTrimmed
+          ? clients.find((client) => client.company.toLowerCase() === clientTrimmed.toLowerCase())
+          : undefined;
+        const managerTrimmed = form.manager_name.trim();
+        const selectedManager = managerTrimmed
+          ? users.find((user) => user.full_name.toLowerCase() === managerTrimmed.toLowerCase())
+          : undefined;
         create.mutate(
           {
-            ...form,
-            client_id: selectedClient?.id ?? "",
-            client_name: form.client_name.trim(),
-            manager_user_id: selectedManager?.id ?? "",
-            manager_name: form.manager_name.trim(),
+            name: form.name.trim(),
+            description: form.description.trim(),
+            client_id: selectedClient?.id || undefined,
+            client_name: clientTrimmed || "Internal",
+            manager_user_id: selectedManager?.id || undefined,
+            manager_name: managerTrimmed || undefined,
             priority: form.priority as Project["priority"],
+            due_date: form.due_date || undefined,
           },
-          { onSuccess: () => toast.success(`${form.name} created`) },
+          {
+            onSuccess: () => {
+              toast.success(`${form.name} created`);
+              setForm({ name: "", description: "", client_id: "", client_name: "", manager_user_id: "", manager_name: "", priority: "Medium", due_date: "" });
+              setError("");
+            },
+            onError: (err) => {
+              toast.error(err instanceof Error ? err.message : "Failed to create project");
+            },
+          },
         );
-        setForm({ name: "", description: "", client_id: "", client_name: "", manager_user_id: "", manager_name: "", priority: "Medium", due_date: "" });
-        setError("");
         return true;
       }}
     >

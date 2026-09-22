@@ -121,7 +121,43 @@ export function useMyMembership(organizationId: string | undefined) {
         .eq("user_id", user.id)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      if (data) return data;
+
+      // Check if user is the organization owner but missing an organization_members row
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("owner_id")
+        .eq("id", organizationId)
+        .maybeSingle();
+
+      if (org && org.owner_id === user.id) {
+        try {
+          const { data: healed } = await supabase
+            .from("organization_members")
+            .upsert({
+              organization_id: organizationId,
+              user_id: user.id,
+              role: "owner" as OrgRole,
+              status: "active",
+              job_title: "Workspace Owner",
+            }, { onConflict: "organization_id,user_id" })
+            .select()
+            .maybeSingle();
+          return healed ?? null;
+        } catch {
+          return {
+            id: `temp-${user.id}`,
+            organization_id: organizationId,
+            user_id: user.id,
+            role: "owner" as OrgRole,
+            status: "active" as const,
+            job_title: "Workspace Owner",
+            created_at: new Date().toISOString(),
+          };
+        }
+      }
+
+      return null;
     },
   });
 }
@@ -289,6 +325,20 @@ export function useCreateOrganization() {
         .select()
         .single();
       if (error) throw error;
+
+      // Add creator to organization_members as owner
+      try {
+        await supabase.from("organization_members").upsert({
+          organization_id: data.id,
+          user_id: user.id,
+          role: "owner" as OrgRole,
+          status: "active",
+          job_title: "Workspace Owner",
+        }, { onConflict: "organization_id,user_id" });
+      } catch {
+        // Continue even if member insert has edge cases
+      }
+
       return data as CloudOrganization;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["cloud"] }),

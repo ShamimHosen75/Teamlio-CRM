@@ -188,6 +188,22 @@ export const mockServices: AppServices = {
     async getClients(org) {
       return delay(scope(store.clients, org));
     },
+    async createClient(org, input) {
+      const client: Client = {
+        id: uid("cli"),
+        ...meta(org),
+        company: input.company || input.name || "Untitled Client",
+        name: input.name || "Client",
+        email: input.email || "",
+        phone: input.phone || "",
+        status: input.status || "Active",
+        industry: input.industry || "General",
+        tags: [],
+        owner_user_id: input.owner_user_id || CURRENT_USER_ID,
+      };
+      store.clients = [client, ...store.clients];
+      return delay(client);
+    },
     async getClient(org, id) {
       return delay(scope(store.clients, org).find((c) => c.id === id));
     },
@@ -197,6 +213,23 @@ export const mockServices: AppServices = {
     },
     async getDeals(org) {
       return delay(scope(store.deals, org));
+    },
+    async createDeal(org, input) {
+      const deal: Deal = {
+        id: uid("dl"),
+        ...meta(org),
+        title: input.title || "Untitled Deal",
+        client_id: input.client_id || "",
+        stage: input.stage || "Discovery",
+        value: input.value || 0,
+        probability: input.probability || 50,
+        expected_close_date: input.expected_close_date || nowIso().slice(0, 10),
+        owner_user_id: input.owner_user_id || CURRENT_USER_ID,
+        notes: input.notes || "",
+        lead_id: input.lead_id || null,
+      };
+      store.deals = [deal, ...store.deals];
+      return delay(deal);
     },
     async updateDeal(org, id, input) {
       store.deals = store.deals.map((d) => (d.id === id ? { ...d, ...input, updated_at: nowIso() } : d));
@@ -286,6 +319,27 @@ export const mockServices: AppServices = {
   communication: {
     async getMeetings(org) {
       return delay(scope(store.meetings, org));
+    },
+    async createMeeting(org, input) {
+      const meeting: Meeting = {
+        id: uid("mtg"),
+        ...meta(org),
+        title: input.title || "Untitled Meeting",
+        type: input.type || "Internal",
+        participant_ids: input.participant_ids || [CURRENT_USER_ID],
+        client_id: input.client_id || null,
+        project_id: input.project_id || null,
+        date: input.date || nowIso().slice(0, 10),
+        start_time: input.start_time || "09:00",
+        end_time: input.end_time || "10:00",
+        meeting_url: input.meeting_url || "",
+        location: input.location || "Online",
+        agenda: input.agenda || "",
+        notes: input.notes || "",
+        status: input.status || "Scheduled",
+      };
+      store.meetings = [meeting, ...store.meetings];
+      return delay(meeting);
     },
     async getChatRooms(org) {
       return delay(scope(store.chatRooms, org));

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { services } from "@/services";
 import { useOrgId, useWorkspace } from "@/app/workspace";
-import type { DailyWorkUpdate, FileRecord, Lead, LeaveRequest, Payment, Project, Task } from "@/lib/types";
+import type { Client, DailyWorkUpdate, Deal, FileRecord, Lead, LeaveRequest, Meeting, Payment, Project, Task } from "@/lib/types";
 
 /** Throw early when the org ID hasn't resolved yet (avoids silent RLS failures). */
 function requireOrg(org: string): asserts org is string {
@@ -75,6 +75,18 @@ export function useCreateProject() {
   });
 }
 
+export function useUpdateProject() {
+  const org = useOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: Partial<Project> }) => {
+      requireOrg(org);
+      return services.projects.updateProject(org, id, input);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+  });
+}
+
 export function useLeads() {
   const org = useOrgId();
   return useQuery({ queryKey: ["leads", org], queryFn: () => services.crm.getLeads(org) });
@@ -95,6 +107,18 @@ export function useClient(id: string) {
   return useQuery({ queryKey: ["client", org, id], queryFn: () => services.crm.getClient(org, id) });
 }
 
+export function useCreateClient() {
+  const org = useOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Partial<Client>) => {
+      requireOrg(org);
+      return services.crm.createClient(org, input);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["clients"] }),
+  });
+}
+
 export function useContacts(clientId?: string) {
   const org = useOrgId();
   return useQuery({
@@ -106,6 +130,18 @@ export function useContacts(clientId?: string) {
 export function useDeals() {
   const org = useOrgId();
   return useQuery({ queryKey: ["deals", org], queryFn: () => services.crm.getDeals(org) });
+}
+
+export function useCreateDeal() {
+  const org = useOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Partial<Deal>) => {
+      requireOrg(org);
+      return services.crm.createDeal(org, input);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["deals"] }),
+  });
 }
 
 export function useUpdateDeal() {
@@ -167,6 +203,18 @@ export function useLeaveBalance(userId: string) {
 export function useMeetings() {
   const org = useOrgId();
   return useQuery({ queryKey: ["meetings", org], queryFn: () => services.communication.getMeetings(org) });
+}
+
+export function useCreateMeeting() {
+  const org = useOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Partial<Meeting>) => {
+      requireOrg(org);
+      return services.communication.createMeeting(org, input);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["meetings"] }),
+  });
 }
 
 export function useChatRooms() {

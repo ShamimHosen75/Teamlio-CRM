@@ -95,9 +95,9 @@ const projectService: AppServices["projects"] = {
       category: "General",
       status: mapProjectStatusToDB(input.status ?? "Planned"),
       priority: (input.priority ?? "Medium").toLowerCase(),
-      manager_id: input.manager_user_id ?? null,
-      start_date: input.start_date ?? null,
-      due_date: input.due_date ?? null,
+      manager_id: input.manager_user_id || null,
+      start_date: input.start_date || null,
+      due_date: input.due_date || null,
       progress: input.progress ?? 0,
     };
     const { data, error } = await supabase
@@ -116,9 +116,9 @@ const projectService: AppServices["projects"] = {
     if (input.status !== undefined) patch.status = mapProjectStatusToDB(input.status);
     if (input.priority !== undefined) patch.priority = input.priority.toLowerCase();
     if (input.progress !== undefined) patch.progress = input.progress;
-    if (input.manager_user_id !== undefined) patch.manager_id = input.manager_user_id;
-    if (input.due_date !== undefined) patch.due_date = input.due_date;
-    if (input.start_date !== undefined) patch.start_date = input.start_date;
+    if (input.manager_user_id !== undefined) patch.manager_id = input.manager_user_id || null;
+    if (input.due_date !== undefined) patch.due_date = input.due_date || null;
+    if (input.start_date !== undefined) patch.start_date = input.start_date || null;
 
     const { data, error } = await supabase
       .from("projects")
@@ -193,8 +193,8 @@ const taskService: AppServices["tasks"] = {
       category: "General",
       status: mapTaskStatusToDB(input.status ?? "To Do"),
       priority: (input.priority ?? "Medium").toLowerCase(),
-      assignee_id: input.assignee_ids?.[0] ?? null,
-      due_date: input.due_date ?? null,
+      assignee_id: input.assignee_ids?.[0] || null,
+      due_date: input.due_date || null,
     };
     const { data, error } = await supabase
       .from("project_tasks")
@@ -211,8 +211,8 @@ const taskService: AppServices["tasks"] = {
     if (input.description !== undefined) patch.description = input.description;
     if (input.status !== undefined) patch.status = mapTaskStatusToDB(input.status);
     if (input.priority !== undefined) patch.priority = input.priority.toLowerCase();
-    if (input.assignee_ids !== undefined) patch.assignee_id = input.assignee_ids[0] ?? null;
-    if (input.due_date !== undefined) patch.due_date = input.due_date;
+    if (input.assignee_ids !== undefined) patch.assignee_id = input.assignee_ids[0] || null;
+    if (input.due_date !== undefined) patch.due_date = input.due_date || null;
 
     const { data, error } = await supabase
       .from("project_tasks")
@@ -276,7 +276,7 @@ const crmService: AppServices["crm"] = {
       status: (input.status ?? "New").toLowerCase(),
       estimated_value: input.estimated_value ?? 0,
       notes: input.notes ?? "",
-      assigned_to: input.assigned_user_id ?? null,
+      assigned_to: input.assigned_user_id || null,
     };
     const { data, error } = await supabase
       .from("crm_leads")
@@ -295,8 +295,8 @@ const crmService: AppServices["crm"] = {
     if (input.phone !== undefined) patch.phone = input.phone;
     if (input.status !== undefined) patch.status = input.status.toLowerCase();
     if (input.notes !== undefined) patch.notes = input.notes;
-    if (input.assigned_user_id !== undefined) patch.assigned_to = input.assigned_user_id;
-    if (input.converted_client_id !== undefined) patch.converted_client_id = input.converted_client_id;
+    if (input.assigned_user_id !== undefined) patch.assigned_to = input.assigned_user_id || null;
+    if (input.converted_client_id !== undefined) patch.converted_client_id = input.converted_client_id || null;
 
     const { data, error } = await supabase
       .from("crm_leads")
@@ -354,7 +354,7 @@ const crmService: AppServices["crm"] = {
       industry: input.industry ?? "General",
       status: (input.status ?? "active").toLowerCase(),
       notes: "",
-      owner_id: input.owner_user_id ?? null,
+      owner_id: input.owner_user_id || null,
     };
     const { data, error } = await supabase
       .from("crm_clients")
@@ -408,12 +408,36 @@ const crmService: AppServices["crm"] = {
     return (data ?? []).map(toDeal);
   },
 
+  async createDeal(org, input: Partial<Deal>) {
+    const row = {
+      organization_id: org,
+      title: input.title ?? "Untitled deal",
+      client_id: input.client_id || null,
+      lead_id: input.lead_id || null,
+      value: input.value ?? 0,
+      probability: input.probability ?? 50,
+      stage: mapDealStageToDB(input.stage ?? "Discovery"),
+      expected_close_date: input.expected_close_date || null,
+      notes: input.notes ?? "",
+      owner_id: input.owner_user_id || null,
+    };
+    const { data, error } = await supabase
+      .from("crm_deals")
+      .insert(row)
+      .select()
+      .single();
+    if (error) throw error;
+    return toDeal(data);
+  },
+
   async updateDeal(org, id, input) {
     const patch: Record<string, unknown> = {};
     if (input.stage !== undefined) patch.stage = mapDealStageToDB(input.stage);
     if (input.value !== undefined) patch.value = input.value;
     if (input.probability !== undefined) patch.probability = input.probability;
-    if (input.owner_user_id !== undefined) patch.owner_id = input.owner_user_id;
+    if (input.owner_user_id !== undefined) patch.owner_id = input.owner_user_id || null;
+    if (input.expected_close_date !== undefined) patch.expected_close_date = input.expected_close_date || null;
+    if (input.notes !== undefined) patch.notes = input.notes;
 
     const { data, error } = await supabase
       .from("crm_deals")
@@ -438,7 +462,18 @@ const peopleService: AppServices["people"] = {
       .eq("organization_id", org);
     if (mErr) throw mErr;
 
-    const ids = (members ?? []).map((m) => m.user_id);
+    // Also get the organization owner so they always show up in user/manager dropdowns
+    const { data: orgRow } = await supabase
+      .from("organizations")
+      .select("owner_id")
+      .eq("id", org)
+      .maybeSingle();
+
+    const ids = Array.from(new Set([
+      ...(members ?? []).map((m) => m.user_id),
+      ...(orgRow?.owner_id ? [orgRow.owner_id] : []),
+    ]));
+
     if (!ids.length) return [];
 
     const { data: profiles, error: pErr } = await supabase
@@ -448,8 +483,8 @@ const peopleService: AppServices["people"] = {
     if (pErr) throw pErr;
 
     return (profiles ?? []).map((p) => {
-      const member = members!.find((m) => m.user_id === p.id);
-      return toUser(p, member);
+      const member = members?.find((m) => m.user_id === p.id);
+      return toUser(p, member ?? { role: "owner", job_title: "Owner" });
     });
   },
 
@@ -620,6 +655,32 @@ const communicationService: AppServices["communication"] = {
       .order("meeting_date", { ascending: true });
     if (error) throw error;
     return (data ?? []).map(toMeeting);
+  },
+
+  async createMeeting(org, input) {
+    const row = {
+      organization_id: org,
+      title: input.title ?? "Untitled meeting",
+      type: input.type ?? "Internal",
+      participant_ids: input.participant_ids ?? [],
+      client_id: input.client_id || null,
+      project_id: input.project_id || null,
+      meeting_date: input.date || new Date().toISOString().slice(0, 10),
+      start_time: input.start_time ?? "09:00",
+      end_time: input.end_time ?? "10:00",
+      meeting_url: input.meeting_url ?? "",
+      location: input.location ?? "",
+      agenda: input.agenda ?? "",
+      notes: input.notes ?? "",
+      status: input.status ?? "Scheduled",
+    };
+    const { data, error } = await supabase
+      .from("meetings")
+      .insert(row)
+      .select()
+      .single();
+    if (error) throw error;
+    return toMeeting(data);
   },
 
   async getChatRooms(org) {

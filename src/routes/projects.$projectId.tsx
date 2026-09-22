@@ -1,4 +1,4 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowLeft, Download, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -17,14 +17,22 @@ import { fmtDate, money, percent } from "@/lib/format";
 import {
   useActivities,
   useClients,
+  useCreateTask,
   useExpenses,
   useFiles,
   useInvoices,
   useMilestones,
   useProject,
   useTasks,
+  useUpdateProject,
   useUpdateTask,
+  useUsers,
 } from "@/hooks/use-data";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FormDrawer } from "@/components/shared/form-drawer";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import type { Task, TaskStatus } from "@/lib/types";
 
 export const Route = createFileRoute("/projects/$projectId")({
@@ -49,9 +57,16 @@ function ProjectDetailPage() {
   const { data: invoices = [] } = useInvoices();
   const { data: expenses = [] } = useExpenses();
   const { data: activities = [] } = useActivities();
+  const { data: users = [] } = useUsers();
   const update = useUpdateTask();
+  const updateProject = useUpdateProject();
+  const createTask = useCreateTask();
   const [openTask, setOpenTask] = useState<Task | null>(null);
   const [zoom, setZoom] = useState<"Daily" | "Weekly" | "Monthly">("Weekly");
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDesc, setNewTaskDesc] = useState("");
+  const [newTaskAssignee, setNewTaskAssignee] = useState("none");
+  const [newTaskDue, setNewTaskDue] = useState("");
 
   if (isLoading) return <SkeletonCard lines={6} />;
   if (!project) return <EmptyState title="Project not found" description="This project may have been archived." />;
@@ -65,28 +80,23 @@ function ProjectDetailPage() {
   return (
     <div className="mx-auto max-w-[1600px]">
       <Link to="/projects" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> All projects
+        <ArrowLeft className="size-4" /> Back to projects
       </Link>
 
       <PageHeader
         title={project.name}
-        description={`${project.code} · ${project.client_name || client?.company || "Internal"} · ${fmtDate(project.start_date)} → ${fmtDate(project.due_date)}`}
+        description={`Created ${fmtDate(project.created_at)} · Priority: ${project.priority} · Health: ${project.health}`}
         actions={
-          <>
-            <StatusBadge status={project.status} />
+          <div className="flex flex-wrap items-center gap-2">
             <PriorityBadge priority={project.priority} />
-            <Button variant="outline" size="sm" onClick={() => toast.success("Project report exported")}>
-              <Download className="size-4" /> Export
-            </Button>
-          </>
+            <StatusBadge status={project.status} />
+          </div>
         }
       />
 
-      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Progress" value={percent(project.progress)}>
-          <Progress value={project.progress} className="mt-2 h-1.5" />
-        </Metric>
+      <div className="my-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Metric label="Tasks completed" value={`${done} / ${tasks.length}`} />
+        <Metric label="Progress" value={percent(project.progress)} />
         <Metric label="Budget used" value={`${money(project.spent)} / ${money(project.budget)}`} />
         <Metric label="Health" value={project.health} />
       </div>
@@ -106,7 +116,40 @@ function ProjectDetailPage() {
             <p className="mt-2 text-sm text-muted-foreground">{project.description}</p>
             <dl className="mt-5 grid gap-4 sm:grid-cols-2">
               <Detail label="Client" value={project.client_name || client?.company || "—"} />
-              <Detail label="Manager" value={project.manager_name || userName(project.manager_user_id)} />
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Assign Project Manager</p>
+                <Select
+                  value={project.manager_user_id || "none"}
+                  onValueChange={(val) => {
+                    const manager = users.find((u) => u.id === val);
+                    updateProject.mutate(
+                      {
+                        id: project.id,
+                        input: {
+                          manager_user_id: val === "none" ? undefined : val,
+                          manager_name: manager?.full_name || undefined,
+                        },
+                      },
+                      {
+                        onSuccess: () => toast.success("Project manager assigned"),
+                        onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to assign manager"),
+                      },
+                    );
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select manager" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {users.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.full_name} ({u.job_title || "Member"})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Detail label="Start date" value={fmtDate(project.start_date)} />
               <Detail label="Due date" value={fmtDate(project.due_date)} />
             </dl>
@@ -127,25 +170,100 @@ function ProjectDetailPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="tasks" className="mt-4">
+        <TabsContent value="tasks" className="mt-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">{tasks.length} tasks in this project</p>
+            <FormDrawer
+              trigger={
+                <Button size="sm">
+                  <Plus className="size-4" /> Add task
+                </Button>
+              }
+              title="Add task to project"
+              description={`Create a new task under ${project.name}`}
+              submitLabel="Create task"
+              onSubmit={() => {
+                if (!newTaskTitle.trim()) {
+                  toast.error("Task title is required");
+                  return false;
+                }
+                createTask.mutate(
+                  {
+                    project_id: project.id,
+                    title: newTaskTitle.trim(),
+                    description: newTaskDesc.trim(),
+                    assignee_ids: newTaskAssignee !== "none" ? [newTaskAssignee] : [],
+                    due_date: newTaskDue || undefined,
+                    priority: "Medium",
+                    status: "To Do",
+                  },
+                  {
+                    onSuccess: () => {
+                      toast.success("Task added to project");
+                      setNewTaskTitle("");
+                      setNewTaskDesc("");
+                      setNewTaskAssignee("none");
+                      setNewTaskDue("");
+                    },
+                    onError: (err) => {
+                      toast.error(err instanceof Error ? err.message : "Failed to create task");
+                    },
+                  },
+                );
+                return true;
+              }}
+            >
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Task title</Label>
+                  <Input value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="e.g. Design header" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Description</Label>
+                  <Textarea value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} rows={3} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Assignee</Label>
+                  <Select value={newTaskAssignee} onValueChange={setNewTaskAssignee}>
+                    <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Unassigned</SelectItem>
+                      {users.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Due date</Label>
+                  <Input type="date" value={newTaskDue} onChange={(e) => setNewTaskDue(e.target.value)} />
+                </div>
+              </div>
+            </FormDrawer>
+          </div>
+
           <div className="surface-card divide-y">
-            {tasks.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setOpenTask(t)}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-accent/60"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{t.title}</p>
-                  <p className="text-xs text-muted-foreground">{t.code} · due {fmtDate(t.due_date)}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <PriorityBadge priority={t.priority} />
-                  <StatusBadge status={t.status} />
-                  <UserAvatarGroup userIds={t.assignee_ids} max={2} />
-                </div>
-              </button>
-            ))}
+            {tasks.length === 0 ? (
+              <p className="p-6 text-center text-sm text-muted-foreground">No tasks yet. Click "Add task" to create the first one.</p>
+            ) : (
+              tasks.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setOpenTask(t)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-accent/60"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{t.title}</p>
+                    <p className="text-xs text-muted-foreground">{t.code} · due {fmtDate(t.due_date)}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <PriorityBadge priority={t.priority} />
+                    <StatusBadge status={t.status} />
+                    <UserAvatarGroup userIds={t.assignee_ids} max={2} />
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </TabsContent>
 

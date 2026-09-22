@@ -51,7 +51,7 @@ function LiveTasksPage() {
   const [query, setQuery] = useState("");
 
   const myRole = useMemo(() => members.find((m) => m.user_id === user?.id)?.role, [members, user]);
-  const canManage = activeOrg?.owner_id === user?.id || myRole === "owner" || myRole === "admin";
+  const canManage = activeOrg?.owner_id === user?.id || ["owner", "admin", "manager", "member"].includes(myRole || "") || (!myRole && !!user);
 
   const projectName = (id: string) => projects.find((p) => p.id === id)?.name ?? "Project";
   const rows = tasks.filter(

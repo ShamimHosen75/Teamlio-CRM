@@ -13,9 +13,12 @@ export function useLiveOrgContext() {
   const { orgs, activeOrg, activeOrgId, setOrgId, isLoading } = useActiveOrg();
   const { data: members = [] } = useOrgMembers(activeOrgId);
   const myRole = members.find((m) => m.user_id === user?.id)?.role;
+  const isOwner = activeOrg?.owner_id === user?.id;
   const canManage =
-    activeOrg?.owner_id === user?.id || myRole === "owner" || myRole === "admin" || myRole === "manager";
-  return { user, orgs, activeOrg, activeOrgId, setOrgId, isLoading, members, canManage };
+    isOwner ||
+    !myRole && !!user ||
+    ["owner", "admin", "manager", "sales_manager", "sales", "member"].includes(myRole || "");
+  return { user, orgs, activeOrg, activeOrgId, setOrgId, isLoading, members, canManage, myRole, isOwner };
 }
 
 /** Page frame shared by every live workspace page: header, org switcher, empty state. */

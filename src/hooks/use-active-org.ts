@@ -1,12 +1,29 @@
-import { useCallback, useEffect, useState } from "react";
-import { useMyOrganizations } from "@/hooks/use-cloud";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useCreateOrganization, useMyOrganizations, useSession } from "@/hooks/use-cloud";
 
 const STORAGE_KEY = "live-active-org-id";
 
 /** Shared selected organization across every live (Supabase-backed) page. */
 export function useActiveOrg() {
+  const { user } = useSession();
   const { data: orgs = [], isLoading } = useMyOrganizations();
   const [orgId, setOrgIdState] = useState<string | undefined>();
+  const createOrg = useCreateOrganization();
+  const provisioningRef = useRef(false);
+
+  // Auto-provision initial workspace for new users who don't have one yet
+  useEffect(() => {
+    if (isLoading || !user || orgs.length > 0 || provisioningRef.current) return;
+    provisioningRef.current = true;
+    const name =
+      (user.user_metadata?.full_name as string) ||
+      (user.email ? `${user.email.split("@")[0]}'s Workspace` : "My Workspace");
+    createOrg.mutate(name, {
+      onError: () => {
+        provisioningRef.current = false;
+      },
+    });
+  }, [isLoading, user, orgs.length, createOrg]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

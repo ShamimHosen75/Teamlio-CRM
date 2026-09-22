@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -137,6 +137,8 @@ function NewTaskDrawer() {
   const [form, setForm] = useState({ title: "", description: "", project_id: "", assignee: "", priority: "Medium", due_date: "" });
   const [error, setError] = useState("");
 
+  const effectiveProjectId = form.project_id || projects[0]?.id || "";
+
   return (
     <FormDrawer
       trigger={
@@ -148,23 +150,31 @@ function NewTaskDrawer() {
       description="Tasks appear instantly in list, board, calendar and timeline views."
       submitLabel="Create task"
       onSubmit={() => {
-        if (!form.title.trim() || !form.project_id) {
-          setError("Task title and project are required.");
+        const targetProjectId = effectiveProjectId;
+        if (!form.title.trim() || !targetProjectId) {
+          setError(!targetProjectId ? "A project is required. Please create a project first." : "Task title is required.");
           return false;
         }
         create.mutate(
           {
-            title: form.title,
-            description: form.description,
-            project_id: form.project_id,
+            title: form.title.trim(),
+            description: form.description.trim(),
+            project_id: targetProjectId,
             assignee_ids: form.assignee ? [form.assignee] : [],
             priority: form.priority as Task["priority"],
-            due_date: form.due_date,
+            due_date: form.due_date || undefined,
           },
-          { onSuccess: () => toast.success("Task created") },
+          {
+            onSuccess: () => {
+              toast.success("Task created");
+              setForm({ title: "", description: "", project_id: projects[0]?.id || "", assignee: "", priority: "Medium", due_date: "" });
+              setError("");
+            },
+            onError: (err) => {
+              toast.error(err instanceof Error ? err.message : "Failed to create task");
+            },
+          },
         );
-        setForm({ title: "", description: "", project_id: "", assignee: "", priority: "Medium", due_date: "" });
-        setError("");
         return true;
       }}
     >
@@ -181,7 +191,7 @@ function NewTaskDrawer() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Project</Label>
-            <Select value={form.project_id} onValueChange={(v) => setForm({ ...form, project_id: v })}>
+            <Select value={effectiveProjectId} onValueChange={(v) => setForm({ ...form, project_id: v })}>
               <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
               <SelectContent>
                 {projects.map((p) => (

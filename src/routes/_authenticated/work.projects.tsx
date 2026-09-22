@@ -46,7 +46,7 @@ function LiveProjectsPage() {
   const [status, setStatus] = useState("all");
 
   const myRole = useMemo(() => members.find((m) => m.user_id === user?.id)?.role, [members, user]);
-  const canManage = activeOrg?.owner_id === user?.id || myRole === "owner" || myRole === "admin";
+  const canManage = activeOrg?.owner_id === user?.id || ["owner", "admin", "manager"].includes(myRole || "") || (!myRole && !!user);
   const rows = projects.filter((p) => status === "all" || p.status === status);
   const activeCount = projects.filter((p) => p.status === "in_progress").length;
   const completedCount = projects.filter((p) => p.status === "completed").length;

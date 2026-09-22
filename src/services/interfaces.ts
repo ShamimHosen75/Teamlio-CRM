@@ -66,9 +66,11 @@ export interface CRMService {
     options: { createClient: boolean; createProject: boolean; templateId?: string; managerId?: string; startDate?: string; dueDate?: string },
   ): Promise<{ client?: Client; project?: Project }>;
   getClients(organizationId: string): Promise<Client[]>;
+  createClient(organizationId: string, input: Partial<Client>): Promise<Client>;
   getClient(organizationId: string, id: string): Promise<Client | undefined>;
   getContacts(organizationId: string, clientId?: string): Promise<Contact[]>;
   getDeals(organizationId: string): Promise<Deal[]>;
+  createDeal(organizationId: string, input: Partial<Deal>): Promise<Deal>;
   updateDeal(organizationId: string, id: string, input: Partial<Deal>): Promise<Deal>;
 }
 
@@ -87,6 +89,7 @@ export interface PeopleService {
 
 export interface CommunicationService {
   getMeetings(organizationId: string): Promise<Meeting[]>;
+  createMeeting(organizationId: string, input: Partial<Meeting>): Promise<Meeting>;
   getChatRooms(organizationId: string): Promise<ChatRoom[]>;
   getChatMessages(organizationId: string, roomId: string): Promise<ChatMessage[]>;
   sendChatMessage(organizationId: string, roomId: string, authorId: string, body: string): Promise<ChatMessage>;

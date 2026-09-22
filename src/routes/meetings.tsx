@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Plus, Video } from "lucide-react";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { fmtDate } from "@/lib/format";
-import { useMeetings } from "@/hooks/use-data";
+import { useCreateMeeting, useMeetings } from "@/hooks/use-data";
 
 export const Route = createFileRoute("/meetings")({
   head: () => ({
@@ -80,7 +80,8 @@ function MeetingsPage() {
 }
 
 function ScheduleDrawer() {
-  const [form, setForm] = useState({ title: "", date: "", start: "", end: "", agenda: "" });
+  const createMeeting = useCreateMeeting();
+  const [form, setForm] = useState({ title: "", type: "Internal", date: "", start: "09:00", end: "10:00", agenda: "" });
   const [error, setError] = useState("");
 
   return (
@@ -93,9 +94,26 @@ function ScheduleDrawer() {
           setError("A title and date are required.");
           return false;
         }
-        toast.success(`${form.title} scheduled`);
-        setForm({ title: "", date: "", start: "", end: "", agenda: "" });
-        setError("");
+        createMeeting.mutate(
+          {
+            title: form.title.trim(),
+            type: form.type as never,
+            date: form.date,
+            start_time: form.start || "09:00",
+            end_time: form.end || "10:00",
+            agenda: form.agenda.trim(),
+          },
+          {
+            onSuccess: () => {
+              toast.success(`${form.title} scheduled`);
+              setForm({ title: "", type: "Internal", date: "", start: "09:00", end: "10:00", agenda: "" });
+              setError("");
+            },
+            onError: (err) => {
+              toast.error(err instanceof Error ? err.message : "Failed to schedule meeting");
+            },
+          },
+        );
         return true;
       }}
     >
