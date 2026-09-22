@@ -4,11 +4,13 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useMatches,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { AuthGuard } from "@/components/auth-guard";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -131,6 +133,11 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  const matches = useMatches();
+
+  // Routes that don't require authentication
+  const currentPath = matches[matches.length - 1]?.pathname ?? "/";
+  const isPublicRoute = currentPath === "/" || currentPath === "/auth";
 
   useEffect(() => {
     const syncAppearance = () => applyAppearance(readAppearance());
@@ -153,12 +160,14 @@ function RootComponent() {
     return () => sub.subscription.unsubscribe();
   }, [router, queryClient]);
 
+  const content = isPublicRoute ? <Outlet /> : <AuthGuard><Outlet /></AuthGuard>;
+
   return (
     <QueryClientProvider client={queryClient}>
       <WorkspaceProvider>
         <TooltipProvider delayDuration={200}>
           <AppShell>
-            <Outlet />
+            {content}
           </AppShell>
           <Toaster position="top-right" richColors />
         </TooltipProvider>

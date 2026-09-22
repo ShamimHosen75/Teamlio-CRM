@@ -125,7 +125,7 @@ export function Topbar({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
            <button className="ml-0.5 shrink-0 rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring sm:ml-1">
-            <UserAvatar userId={currentUser.id} size="sm" />
+            <UserAvatar userId={currentUser.id} name={currentUser.full_name} size="sm" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">

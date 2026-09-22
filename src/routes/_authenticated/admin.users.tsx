@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fmtDate } from "@/lib/format";
 import { ORG_ROLE_TO_ROLE_NAME } from "@/lib/permissions";
 import { useActiveOrg } from "@/hooks/use-active-org";
+import { useWorkspace } from "@/app/workspace";
 import {
   ORG_ROLES,
   useCancelInvite,
@@ -51,7 +52,8 @@ function AdminUsersPage() {
   const { data: members = [], isLoading } = useOrgMembers(activeOrgId);
   const { data: invites = [] } = useOrgInvites(activeOrgId);
   const { data: membership } = useMyMembership(activeOrgId);
-  const canManage = membership?.role === "owner" || membership?.role === "admin";
+  const { can } = useWorkspace();
+  const canManage = can("user.manage") || membership?.role === "owner" || membership?.role === "admin";
 
   const updateMember = useUpdateMember();
   const removeMember = useRemoveMember();
@@ -59,7 +61,7 @@ function AdminUsersPage() {
   const pending = invites.filter((i) => !i.accepted_at);
 
   return (
-    <PermissionGuard permission="user.read" mode="page">
+    <PermissionGuard permission="user.manage" mode="page">
       <div className="mx-auto max-w-[1400px]">
         <PageHeader
           title="User management"

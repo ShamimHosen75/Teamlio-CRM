@@ -1,10 +1,11 @@
 import type { AppServices } from "./interfaces";
-import { mockServices } from "./mock";
+import { supabaseServices } from "./supabase";
+// import { mockServices } from "./mock";
 
 /**
- * Single provider entry point. Swapping the mock provider for a Supabase
- * provider later is a one-line change here — the UI and hooks stay untouched.
+ * Single provider entry point.
+ * Switch between supabaseServices (live) and mockServices (demo) here.
  */
-export const services: AppServices = mockServices;
+export const services: AppServices = supabaseServices;
 
 export type { AppServices } from "./interfaces";

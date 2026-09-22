@@ -1,5 +1,5 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
 import { PermissionGuard } from "@/components/shared/permission-guard";
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspace } from "@/app/workspace";
+import { useSession, useUpdateMyProfile } from "@/hooks/use-cloud";
 import { AppearanceSettingsPanel } from "@/components/settings/appearance-settings";
 
 export const Route = createFileRoute("/settings")({
@@ -28,15 +29,55 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  const { organization, currentUser } = useWorkspace();
+  const { organization, currentUser, updateCurrentUser } = useWorkspace();
+  const { user } = useSession();
+  const updateMyProfile = useUpdateMyProfile();
+
   const [org, setOrg] = useState({
     name: organization.name,
     currency: organization.currency,
     timezone: organization.timezone,
     address: "12 Kemal Ataturk Ave, Dhaka",
   });
-  const [profile, setProfile] = useState({ name: currentUser.full_name, email: currentUser.email, title: currentUser.job_title });
+  const [profile, setProfile] = useState({
+    name: currentUser.full_name,
+    email: currentUser.email,
+    title: currentUser.job_title,
+  });
   const [prefs, setPrefs] = useState({ weekStartMonday: true, autoArchive: true, requireApproval: false, compactTables: false });
+
+  useEffect(() => {
+    setProfile({
+      name: currentUser.full_name,
+      email: currentUser.email,
+      title: currentUser.job_title,
+    });
+  }, [currentUser.full_name, currentUser.email, currentUser.job_title]);
+
+  const handleSaveProfile = () => {
+    if (!profile.name.trim()) {
+      toast.error("Full name cannot be empty");
+      return;
+    }
+    updateCurrentUser({
+      full_name: profile.name.trim(),
+      email: profile.email.trim(),
+      job_title: profile.title.trim(),
+    });
+
+    if (user) {
+      updateMyProfile.mutate(
+        { full_name: profile.name.trim(), job_title: profile.title.trim() || null },
+        {
+          onSuccess: () => toast.success("Profile updated"),
+          onError: (err) =>
+            toast.error(err instanceof Error ? err.message : "Error saving profile"),
+        },
+      );
+    } else {
+      toast.success("Profile updated");
+    }
+  };
 
   return (
     <PermissionGuard permission="settings.manage" mode="page">
@@ -79,7 +120,7 @@ function SettingsPage() {
               <Field label="Full name" value={profile.name} onChange={(v) => setProfile({ ...profile, name: v })} />
               <Field label="Email" value={profile.email} onChange={(v) => setProfile({ ...profile, email: v })} />
               <Field label="Job title" value={profile.title} onChange={(v) => setProfile({ ...profile, title: v })} />
-              <Button size="sm" onClick={() => toast.success("Profile updated")}>Save profile</Button>
+              <Button size="sm" onClick={handleSaveProfile}>Save profile</Button>
             </div>
           </TabsContent>
 

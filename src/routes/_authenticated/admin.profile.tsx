@@ -10,11 +10,11 @@ import {
   useMyProfile,
   useMyMembership,
   useSession,
-  
   useUpdateMyEmail,
   useUpdateMyProfile,
   useUploadMyAvatar,
 } from "@/hooks/use-cloud";
+import { useWorkspace } from "@/app/workspace";
 import { ORG_ROLE_TO_ROLE_NAME, ROLE_PERMISSIONS } from "@/lib/permissions";
 import { fmtDate, initials } from "@/lib/format";
 import { Mail, ShieldCheck, UserRound } from "lucide-react";
@@ -41,6 +41,7 @@ function AdminProfilePage() {
   const { activeOrgId, activeOrg } = useLiveOrgContext();
   const { data: profile, isLoading } = useMyProfile();
   const { data: membership } = useMyMembership(activeOrgId);
+  const { currentUser, updateCurrentUser } = useWorkspace();
   const updateProfile = useUpdateMyProfile();
   const updateEmail = useUpdateMyEmail();
   const uploadAvatar = useUploadMyAvatar();
@@ -51,10 +52,24 @@ function AdminProfilePage() {
   const [email, setEmail] = useState("");
 
   useEffect(() => {
-    setFullName(profile?.full_name ?? "");
-    setJobTitle(profile?.job_title ?? "");
-    setEmail(profile?.email ?? user?.email ?? "");
-  }, [profile?.full_name, profile?.job_title, profile?.email, user?.email]);
+    setFullName(
+      profile?.full_name ||
+        (user?.user_metadata?.full_name as string | undefined) ||
+        currentUser.full_name ||
+        "",
+    );
+    setJobTitle(profile?.job_title || currentUser.job_title || "");
+    setEmail(profile?.email || user?.email || currentUser.email || "");
+  }, [
+    profile?.full_name,
+    profile?.job_title,
+    profile?.email,
+    user?.email,
+    user?.user_metadata,
+    currentUser.full_name,
+    currentUser.job_title,
+    currentUser.email,
+  ]);
 
   const roleName = membership ? ORG_ROLE_TO_ROLE_NAME[membership.role] : "No workspace role yet";
   const permissionCount = membership ? ROLE_PERMISSIONS[ORG_ROLE_TO_ROLE_NAME[membership.role]]?.length ?? 0 : 0;
@@ -64,6 +79,10 @@ function AdminProfilePage() {
       toast.error("Enter your name");
       return;
     }
+    updateCurrentUser({
+      full_name: fullName.trim(),
+      job_title: jobTitle.trim(),
+    });
     updateProfile.mutate(
       { full_name: fullName.trim(), job_title: jobTitle.trim() || null },
       {
@@ -79,6 +98,7 @@ function AdminProfilePage() {
       toast.error("Enter a valid email address");
       return;
     }
+    updateCurrentUser({ email: next });
     if (next === (user?.email ?? "")) {
       toast.info("That is already your email address");
       return;

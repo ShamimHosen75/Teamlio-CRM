@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { services } from "@/services";
-import { useOrgId } from "@/app/workspace";
-import { CURRENT_USER_ID } from "@/services/store";
+import { useOrgId, useWorkspace } from "@/app/workspace";
 import type { DailyWorkUpdate, FileRecord, Lead, LeaveRequest, Payment, Project, Task } from "@/lib/types";
 
 /** Feature hooks — the only layer components talk to. */
@@ -326,10 +325,11 @@ export function useCreateLead() {
 
 export function useSendChatMessage() {
   const org = useOrgId();
+  const { currentUser } = useWorkspace();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ roomId, body }: { roomId: string; body: string }) =>
-      services.communication.sendChatMessage(org, roomId, CURRENT_USER_ID, body),
+      services.communication.sendChatMessage(org, roomId, currentUser.id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages"] }),
   });
 }

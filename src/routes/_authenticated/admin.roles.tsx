@@ -35,7 +35,7 @@ function RolesPage() {
   const { data: membership } = useMyMembership(activeOrgId);
 
   return (
-    <PermissionGuard permission="user.read" mode="page">
+    <PermissionGuard permission="user.manage" mode="page">
       <div className="mx-auto max-w-[1500px]">
         <PageHeader
           title="Roles & permissions"

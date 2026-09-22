@@ -11,18 +11,20 @@ export function userName(id: string | null | undefined): string {
 
 export function UserAvatar({
   userId,
+  name,
   size = "sm",
   className,
 }: {
-  userId: string | null | undefined;
+  userId?: string | null;
+  name?: string;
   size?: "xs" | "sm" | "md" | "lg";
   className?: string;
 }) {
   const sizes = { xs: "size-6 text-[10px]", sm: "size-7 text-xs", md: "size-9 text-sm", lg: "size-12 text-base" };
-  const name = userName(userId);
+  const displayName = name || userName(userId);
   return (
     <Avatar className={cn(sizes[size], "border border-border", className)}>
-      <AvatarFallback className="bg-primary-soft font-medium text-primary">{initials(name)}</AvatarFallback>
+      <AvatarFallback className="bg-primary-soft font-medium text-primary">{initials(displayName)}</AvatarFallback>
     </Avatar>
   );
 }
