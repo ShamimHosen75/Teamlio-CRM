@@ -79,6 +79,7 @@ export interface PeopleService {
   getUsers(organizationId: string): Promise<User[]>;
   getRoles(organizationId: string): Promise<Role[]>;
   getTeams(organizationId: string): Promise<Team[]>;
+  createTeam(organizationId: string, input: Partial<Team> & { initialMemberIds?: string[] }): Promise<Team>;
   getTeamMembers(organizationId: string, teamId?: string): Promise<{ user: User; role_in_team: string }[]>;
   getDailyUpdates(organizationId: string, date?: string): Promise<DailyWorkUpdate[]>;
   createDailyUpdate(organizationId: string, input: Partial<DailyWorkUpdate>): Promise<DailyWorkUpdate>;

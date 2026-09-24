@@ -520,6 +520,31 @@ const peopleService: AppServices["people"] = {
     return (data ?? []).map(toTeam);
   },
 
+  async createTeam(org, input) {
+    const { data, error } = await (supabase as any)
+      .from("teams")
+      .insert({
+        organization_id: org,
+        name: input.name,
+        description: input.description ?? "",
+        lead_id: input.lead_user_id || null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    if (input.initialMemberIds?.length) {
+      const memberRows = input.initialMemberIds.map((userId) => ({
+        team_id: data.id,
+        user_id: userId,
+        role_in_team: "Member",
+      }));
+      await (supabase as any).from("team_members").insert(memberRows);
+    }
+
+    return toTeam(data);
+  },
+
   async getTeamMembers(org, teamId) {
     const users = await this.getUsers(org);
     let q = supabase.from("team_members").select("*");

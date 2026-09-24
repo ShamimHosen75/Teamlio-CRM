@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { services } from "@/services";
 import { useOrgId, useWorkspace } from "@/app/workspace";
-import type { Client, DailyWorkUpdate, Deal, FileRecord, Lead, LeaveRequest, Meeting, Payment, Project, Task, TeamMemberRequest } from "@/lib/types";
+import type { Client, DailyWorkUpdate, Deal, FileRecord, Lead, LeaveRequest, Meeting, Payment, Project, Task, Team, TeamMemberRequest } from "@/lib/types";
 
 /** Throw early when the org ID hasn't resolved yet (avoids silent RLS failures). */
 function requireOrg(org: string): asserts org is string {
@@ -169,6 +169,20 @@ export function useRoles() {
 export function useTeams() {
   const org = useOrgId();
   return useQuery({ queryKey: ["teams", org], queryFn: () => services.people.getTeams(org) });
+}
+
+export function useCreateTeam() {
+  const qc = useQueryClient();
+  const org = useOrgId();
+  return useMutation({
+    mutationFn: (input: Partial<Team> & { initialMemberIds?: string[] }) =>
+      services.people.createTeam(org, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["teams"] });
+      qc.invalidateQueries({ queryKey: ["team-members"] });
+      qc.invalidateQueries({ queryKey: ["cloud"] });
+    },
+  });
 }
 
 export function useTeamMembers(teamId?: string) {

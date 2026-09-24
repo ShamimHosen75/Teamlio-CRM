@@ -9,6 +9,7 @@ import type {
   Payment,
   Project,
   Task,
+  Team,
   TeamMemberRequest,
 } from "@/lib/types";
 import { CURRENT_USER_ID, LEAVE_TYPES, delay, nowIso, scope, store, uid } from "./store";
@@ -252,6 +253,33 @@ export const mockServices: AppServices = {
     },
     async getTeams(org) {
       return delay(scope(store.teams, org));
+    },
+    async createTeam(org, input) {
+      const team: Team = {
+        id: uid("team"),
+        ...meta(org),
+        name: input.name ?? "New Team",
+        description: input.description ?? "",
+        lead_user_id: input.lead_user_id ?? "",
+        status: input.status ?? "Active",
+        color: input.color ?? "#6366f1",
+      };
+      store.teams = [team, ...store.teams];
+
+      if (input.initialMemberIds?.length) {
+        for (const uidVal of input.initialMemberIds) {
+          store.teamMembers.push({
+            id: uid("tm"),
+            organization_id: org,
+            team_id: team.id,
+            user_id: uidVal,
+            role_in_team: "Member",
+            created_at: nowIso(),
+            updated_at: nowIso(),
+          });
+        }
+      }
+      return delay(team);
     },
     async getTeamMembers(org, teamId) {
       const rows = scope(store.teamMembers, org).filter((m) => (teamId ? m.team_id === teamId : true));

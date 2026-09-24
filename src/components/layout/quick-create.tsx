@@ -13,7 +13,8 @@ import {
 import { usePermissions } from "@/app/workspace";
 import type { Permission } from "@/lib/permissions";
 
-const OPTIONS: { label: string; to: string; permission?: Permission }[] = [
+const OPTIONS: { label: string; to: string; permission?: Permission; search?: Record<string, string> }[] = [
+  { label: "Team", to: "/teams", search: { create: "true" }, permission: "team.read" },
   { label: "Project", to: "/projects", permission: "project.create" },
   { label: "Task", to: "/tasks", permission: "task.create" },
   { label: "Lead", to: "/crm/leads", permission: "lead.create" },
@@ -47,7 +48,7 @@ export function QuickCreate() {
           <DropdownMenuItem
             key={o.label}
             onSelect={() => {
-              navigate({ to: o.to });
+              navigate({ to: o.to, search: (o.search as any) });
               toast.info(`Opening ${o.label.toLowerCase()} creation`);
             }}
           >
