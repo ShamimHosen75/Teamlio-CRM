@@ -43,9 +43,15 @@ import type {
   ScheduledContent,
   Task,
   Team,
+  TeamMemberRequest,
+  TeamMemberRequestStatus,
   User,
 } from "@/lib/types";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as typedSupabase } from "@/integrations/supabase/client";
+
+// Cast client to any because migrations add tables that are not yet in the generated Database type definitions.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = typedSupabase as any;
 
 /* ─── helpers ─────────────────────────────────────────────────────────── */
 
@@ -470,7 +476,7 @@ const peopleService: AppServices["people"] = {
       .maybeSingle();
 
     const ids = Array.from(new Set([
-      ...(members ?? []).map((m) => m.user_id),
+      ...(members ?? []).map((m: Row) => m.user_id),
       ...(orgRow?.owner_id ? [orgRow.owner_id] : []),
     ]));
 
@@ -482,8 +488,8 @@ const peopleService: AppServices["people"] = {
       .in("id", ids);
     if (pErr) throw pErr;
 
-    return (profiles ?? []).map((p) => {
-      const member = members?.find((m) => m.user_id === p.id);
+    return (profiles ?? []).map((p: Row) => {
+      const member = members?.find((m: Row) => m.user_id === p.id);
       return toUser(p, member ?? { role: "owner", job_title: "Owner" });
     });
   },
@@ -525,13 +531,13 @@ const peopleService: AppServices["people"] = {
         .from("teams")
         .select("id")
         .eq("organization_id", org);
-      const teamIds = (teams ?? []).map((t) => t.id);
+      const teamIds = (teams ?? []).map((t: Row) => t.id);
       if (!teamIds.length) return [];
       q = q.in("team_id", teamIds);
     }
     const { data, error } = await q;
     if (error) throw error;
-    return (data ?? []).map((tm) => ({
+    return (data ?? []).map((tm: Row) => ({
       user: users.find((u) => u.id === tm.user_id) ?? users[0],
       role_in_team: tm.role_in_team,
     }));
@@ -635,12 +641,69 @@ const peopleService: AppServices["people"] = {
         { leave_type: "Personal", entitled: 5, used: 0, pending: 0 },
       ];
     }
-    return data.map((r) => ({
+    return data.map((r: Row) => ({
       leave_type: r.leave_type,
       entitled: Number(r.entitled),
       used: Number(r.used),
       pending: Number(r.pending),
     }));
+  },
+
+  async getTeamMemberRequests(org, teamId) {
+    let q = supabase
+      .from("team_member_requests")
+      .select("*")
+      .eq("organization_id", org)
+      .order("created_at", { ascending: false });
+    if (teamId) q = q.eq("team_id", teamId);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data ?? []).map(toTeamMemberRequest);
+  },
+
+  async createTeamMemberRequest(org, input) {
+    const row = {
+      organization_id: org,
+      team_id: input.team_id,
+      user_id: input.user_id,
+      role_in_team: input.role_in_team || "Member",
+      status: "pending",
+      message: input.message || "",
+    };
+    const { data, error } = await supabase
+      .from("team_member_requests")
+      .insert(row)
+      .select()
+      .single();
+    if (error) throw error;
+    return toTeamMemberRequest(data);
+  },
+
+  async reviewTeamMemberRequest(org, id, status, reviewerId) {
+    const { data, error } = await supabase
+      .from("team_member_requests")
+      .update({
+        status,
+        reviewed_by: reviewerId,
+        reviewed_at: nowIso(),
+      })
+      .eq("id", id)
+      .eq("organization_id", org)
+      .select()
+      .single();
+    if (error) throw error;
+
+    if (status === "approved" && data) {
+      await supabase
+        .from("team_members")
+        .insert({
+          team_id: data.team_id,
+          user_id: data.user_id,
+          role_in_team: data.role_in_team,
+        });
+    }
+
+    return toTeamMemberRequest(data);
   },
 };
 
@@ -1694,6 +1757,22 @@ function toLeaveRequest(r: Row): LeaveRequest {
     reason: r.reason ?? "",
     approver_id: r.approver_id ?? "",
     status: r.status as LeaveRequest["status"],
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  };
+}
+
+function toTeamMemberRequest(r: Row): TeamMemberRequest {
+  return {
+    id: r.id,
+    organization_id: r.organization_id,
+    team_id: r.team_id,
+    user_id: r.user_id,
+    role_in_team: r.role_in_team ?? "Member",
+    status: (r.status ?? "pending") as TeamMemberRequestStatus,
+    message: r.message ?? "",
+    reviewed_by: r.reviewed_by ?? null,
+    reviewed_at: r.reviewed_at ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at,
   };

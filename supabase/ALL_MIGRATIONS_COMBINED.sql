@@ -1,6 +1,19 @@
 -- =============================================================
 -- COMBINED MIGRATIONS: Paste this entire file into Supabase SQL Editor
 -- =============================================================
+-- Ensure helper function exists
+-- =============================================================
+CREATE OR REPLACE FUNCTION public.set_record_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
 
 -- 1. MEETINGS
 CREATE TABLE IF NOT EXISTS public.meetings (
@@ -25,12 +38,17 @@ CREATE TABLE IF NOT EXISTS public.meetings (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.meetings TO authenticated;
 GRANT ALL ON public.meetings TO service_role;
 ALTER TABLE public.meetings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS meetings_select ON public.meetings;
 CREATE POLICY meetings_select ON public.meetings FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS meetings_insert ON public.meetings;
 CREATE POLICY meetings_insert ON public.meetings FOR INSERT TO authenticated WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS meetings_update ON public.meetings;
 CREATE POLICY meetings_update ON public.meetings FOR UPDATE TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS meetings_delete ON public.meetings;
 CREATE POLICY meetings_delete ON public.meetings FOR DELETE TO authenticated USING (private.is_org_admin(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS meetings_org_idx ON public.meetings(organization_id);
 CREATE INDEX IF NOT EXISTS meetings_date_idx ON public.meetings(meeting_date);
+DROP TRIGGER IF EXISTS set_meetings_updated_at ON public.meetings;
 CREATE TRIGGER set_meetings_updated_at BEFORE UPDATE ON public.meetings FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 2. CHAT ROOMS
@@ -48,11 +66,16 @@ CREATE TABLE IF NOT EXISTS public.chat_rooms (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.chat_rooms TO authenticated;
 GRANT ALL ON public.chat_rooms TO service_role;
 ALTER TABLE public.chat_rooms ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS chat_rooms_select ON public.chat_rooms;
 CREATE POLICY chat_rooms_select ON public.chat_rooms FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS chat_rooms_insert ON public.chat_rooms;
 CREATE POLICY chat_rooms_insert ON public.chat_rooms FOR INSERT TO authenticated WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS chat_rooms_update ON public.chat_rooms;
 CREATE POLICY chat_rooms_update ON public.chat_rooms FOR UPDATE TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS chat_rooms_delete ON public.chat_rooms;
 CREATE POLICY chat_rooms_delete ON public.chat_rooms FOR DELETE TO authenticated USING (private.is_org_admin(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS chat_rooms_org_idx ON public.chat_rooms(organization_id);
+DROP TRIGGER IF EXISTS set_chat_rooms_updated_at ON public.chat_rooms;
 CREATE TRIGGER set_chat_rooms_updated_at BEFORE UPDATE ON public.chat_rooms FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 3. CHAT MESSAGES
@@ -73,12 +96,17 @@ CREATE TABLE IF NOT EXISTS public.chat_messages (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.chat_messages TO authenticated;
 GRANT ALL ON public.chat_messages TO service_role;
 ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS chat_messages_select ON public.chat_messages;
 CREATE POLICY chat_messages_select ON public.chat_messages FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS chat_messages_insert ON public.chat_messages;
 CREATE POLICY chat_messages_insert ON public.chat_messages FOR INSERT TO authenticated WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS chat_messages_update ON public.chat_messages;
 CREATE POLICY chat_messages_update ON public.chat_messages FOR UPDATE TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS chat_messages_delete ON public.chat_messages;
 CREATE POLICY chat_messages_delete ON public.chat_messages FOR DELETE TO authenticated USING (author_id = auth.uid() OR private.is_org_admin(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS chat_messages_room_idx ON public.chat_messages(room_id);
 CREATE INDEX IF NOT EXISTS chat_messages_org_idx ON public.chat_messages(organization_id);
+DROP TRIGGER IF EXISTS set_chat_messages_updated_at ON public.chat_messages;
 CREATE TRIGGER set_chat_messages_updated_at BEFORE UPDATE ON public.chat_messages FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 4. LEAVE REQUESTS
@@ -100,12 +128,17 @@ CREATE TABLE IF NOT EXISTS public.leave_requests (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.leave_requests TO authenticated;
 GRANT ALL ON public.leave_requests TO service_role;
 ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS leave_requests_select ON public.leave_requests;
 CREATE POLICY leave_requests_select ON public.leave_requests FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS leave_requests_insert ON public.leave_requests;
 CREATE POLICY leave_requests_insert ON public.leave_requests FOR INSERT TO authenticated WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS leave_requests_update ON public.leave_requests;
 CREATE POLICY leave_requests_update ON public.leave_requests FOR UPDATE TO authenticated USING (user_id = auth.uid() OR private.is_org_admin(organization_id, auth.uid())) WITH CHECK (user_id = auth.uid() OR private.is_org_admin(organization_id, auth.uid()));
+DROP POLICY IF EXISTS leave_requests_delete ON public.leave_requests;
 CREATE POLICY leave_requests_delete ON public.leave_requests FOR DELETE TO authenticated USING (user_id = auth.uid() OR private.is_org_admin(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS leave_requests_org_idx ON public.leave_requests(organization_id);
 CREATE INDEX IF NOT EXISTS leave_requests_user_idx ON public.leave_requests(user_id);
+DROP TRIGGER IF EXISTS set_leave_requests_updated_at ON public.leave_requests;
 CREATE TRIGGER set_leave_requests_updated_at BEFORE UPDATE ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 5. LEAVE BALANCES
@@ -124,9 +157,12 @@ CREATE TABLE IF NOT EXISTS public.leave_balances (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.leave_balances TO authenticated;
 GRANT ALL ON public.leave_balances TO service_role;
 ALTER TABLE public.leave_balances ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS leave_balances_select ON public.leave_balances;
 CREATE POLICY leave_balances_select ON public.leave_balances FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS leave_balances_write ON public.leave_balances;
 CREATE POLICY leave_balances_write ON public.leave_balances FOR ALL TO authenticated USING (private.is_org_admin(organization_id, auth.uid())) WITH CHECK (private.is_org_admin(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS leave_balances_org_idx ON public.leave_balances(organization_id);
+DROP TRIGGER IF EXISTS set_leave_balances_updated_at ON public.leave_balances;
 CREATE TRIGGER set_leave_balances_updated_at BEFORE UPDATE ON public.leave_balances FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 6. DAILY WORK UPDATES
@@ -149,13 +185,18 @@ CREATE TABLE IF NOT EXISTS public.daily_work_updates (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.daily_work_updates TO authenticated;
 GRANT ALL ON public.daily_work_updates TO service_role;
 ALTER TABLE public.daily_work_updates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS daily_updates_select ON public.daily_work_updates;
 CREATE POLICY daily_updates_select ON public.daily_work_updates FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS daily_updates_insert ON public.daily_work_updates;
 CREATE POLICY daily_updates_insert ON public.daily_work_updates FOR INSERT TO authenticated WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS daily_updates_update ON public.daily_work_updates;
 CREATE POLICY daily_updates_update ON public.daily_work_updates FOR UPDATE TO authenticated USING (user_id = auth.uid() OR private.is_org_admin(organization_id, auth.uid())) WITH CHECK (user_id = auth.uid() OR private.is_org_admin(organization_id, auth.uid()));
+DROP POLICY IF EXISTS daily_updates_delete ON public.daily_work_updates;
 CREATE POLICY daily_updates_delete ON public.daily_work_updates FOR DELETE TO authenticated USING (user_id = auth.uid() OR private.is_org_admin(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS daily_updates_org_idx ON public.daily_work_updates(organization_id);
 CREATE INDEX IF NOT EXISTS daily_updates_date_idx ON public.daily_work_updates(update_date);
 CREATE INDEX IF NOT EXISTS daily_updates_user_idx ON public.daily_work_updates(user_id);
+DROP TRIGGER IF EXISTS set_daily_updates_updated_at ON public.daily_work_updates;
 CREATE TRIGGER set_daily_updates_updated_at BEFORE UPDATE ON public.daily_work_updates FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 7. QUOTATIONS
@@ -178,9 +219,12 @@ CREATE TABLE IF NOT EXISTS public.quotations (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.quotations TO authenticated;
 GRANT ALL ON public.quotations TO service_role;
 ALTER TABLE public.quotations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS quotations_select ON public.quotations;
 CREATE POLICY quotations_select ON public.quotations FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS quotations_write ON public.quotations;
 CREATE POLICY quotations_write ON public.quotations FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS quotations_org_idx ON public.quotations(organization_id);
+DROP TRIGGER IF EXISTS set_quotations_updated_at ON public.quotations;
 CREATE TRIGGER set_quotations_updated_at BEFORE UPDATE ON public.quotations FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 8. NOTIFICATIONS
@@ -199,12 +243,17 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.notifications TO authenticated;
 GRANT ALL ON public.notifications TO service_role;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS notifications_select ON public.notifications;
 CREATE POLICY notifications_select ON public.notifications FOR SELECT TO authenticated USING ((user_id = auth.uid() OR user_id IS NULL) AND private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS notifications_insert ON public.notifications;
 CREATE POLICY notifications_insert ON public.notifications FOR INSERT TO authenticated WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS notifications_update ON public.notifications;
 CREATE POLICY notifications_update ON public.notifications FOR UPDATE TO authenticated USING (user_id = auth.uid() OR private.is_org_admin(organization_id, auth.uid())) WITH CHECK (user_id = auth.uid() OR private.is_org_admin(organization_id, auth.uid()));
+DROP POLICY IF EXISTS notifications_delete ON public.notifications;
 CREATE POLICY notifications_delete ON public.notifications FOR DELETE TO authenticated USING (user_id = auth.uid() OR private.is_org_admin(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS notifications_org_idx ON public.notifications(organization_id);
 CREATE INDEX IF NOT EXISTS notifications_user_idx ON public.notifications(user_id);
+DROP TRIGGER IF EXISTS set_notifications_updated_at ON public.notifications;
 CREATE TRIGGER set_notifications_updated_at BEFORE UPDATE ON public.notifications FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 9. CAMPAIGNS
@@ -230,9 +279,12 @@ CREATE TABLE IF NOT EXISTS public.campaigns (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.campaigns TO authenticated;
 GRANT ALL ON public.campaigns TO service_role;
 ALTER TABLE public.campaigns ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS campaigns_select ON public.campaigns;
 CREATE POLICY campaigns_select ON public.campaigns FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS campaigns_write ON public.campaigns;
 CREATE POLICY campaigns_write ON public.campaigns FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS campaigns_org_idx ON public.campaigns(organization_id);
+DROP TRIGGER IF EXISTS set_campaigns_updated_at ON public.campaigns;
 CREATE TRIGGER set_campaigns_updated_at BEFORE UPDATE ON public.campaigns FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 10. CONTENT ITEMS
@@ -262,9 +314,12 @@ CREATE TABLE IF NOT EXISTS public.content_items (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.content_items TO authenticated;
 GRANT ALL ON public.content_items TO service_role;
 ALTER TABLE public.content_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS content_items_select ON public.content_items;
 CREATE POLICY content_items_select ON public.content_items FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS content_items_write ON public.content_items;
 CREATE POLICY content_items_write ON public.content_items FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS content_items_org_idx ON public.content_items(organization_id);
+DROP TRIGGER IF EXISTS set_content_items_updated_at ON public.content_items;
 CREATE TRIGGER set_content_items_updated_at BEFORE UPDATE ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 11. SCHEDULED CONTENT
@@ -284,9 +339,12 @@ CREATE TABLE IF NOT EXISTS public.scheduled_content (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.scheduled_content TO authenticated;
 GRANT ALL ON public.scheduled_content TO service_role;
 ALTER TABLE public.scheduled_content ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS scheduled_content_select ON public.scheduled_content;
 CREATE POLICY scheduled_content_select ON public.scheduled_content FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS scheduled_content_write ON public.scheduled_content;
 CREATE POLICY scheduled_content_write ON public.scheduled_content FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS scheduled_content_org_idx ON public.scheduled_content(organization_id);
+DROP TRIGGER IF EXISTS set_scheduled_content_updated_at ON public.scheduled_content;
 CREATE TRIGGER set_scheduled_content_updated_at BEFORE UPDATE ON public.scheduled_content FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 12. META LEADS
@@ -308,9 +366,12 @@ CREATE TABLE IF NOT EXISTS public.meta_leads (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.meta_leads TO authenticated;
 GRANT ALL ON public.meta_leads TO service_role;
 ALTER TABLE public.meta_leads ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS meta_leads_select ON public.meta_leads;
 CREATE POLICY meta_leads_select ON public.meta_leads FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS meta_leads_write ON public.meta_leads;
 CREATE POLICY meta_leads_write ON public.meta_leads FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS meta_leads_org_idx ON public.meta_leads(organization_id);
+DROP TRIGGER IF EXISTS set_meta_leads_updated_at ON public.meta_leads;
 CREATE TRIGGER set_meta_leads_updated_at BEFORE UPDATE ON public.meta_leads FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 13. MARKETING CONVERSATIONS
@@ -331,9 +392,12 @@ CREATE TABLE IF NOT EXISTS public.marketing_conversations (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.marketing_conversations TO authenticated;
 GRANT ALL ON public.marketing_conversations TO service_role;
 ALTER TABLE public.marketing_conversations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS mkt_conversations_select ON public.marketing_conversations;
 CREATE POLICY mkt_conversations_select ON public.marketing_conversations FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS mkt_conversations_write ON public.marketing_conversations;
 CREATE POLICY mkt_conversations_write ON public.marketing_conversations FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS mkt_conversations_org_idx ON public.marketing_conversations(organization_id);
+DROP TRIGGER IF EXISTS set_mkt_conversations_updated_at ON public.marketing_conversations;
 CREATE TRIGGER set_mkt_conversations_updated_at BEFORE UPDATE ON public.marketing_conversations FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 14. MARKETING CONVERSATION MESSAGES
@@ -350,9 +414,12 @@ CREATE TABLE IF NOT EXISTS public.marketing_conversation_messages (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.marketing_conversation_messages TO authenticated;
 GRANT ALL ON public.marketing_conversation_messages TO service_role;
 ALTER TABLE public.marketing_conversation_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS mkt_conv_msgs_select ON public.marketing_conversation_messages;
 CREATE POLICY mkt_conv_msgs_select ON public.marketing_conversation_messages FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS mkt_conv_msgs_write ON public.marketing_conversation_messages;
 CREATE POLICY mkt_conv_msgs_write ON public.marketing_conversation_messages FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS mkt_conv_msgs_conv_idx ON public.marketing_conversation_messages(conversation_id);
+DROP TRIGGER IF EXISTS set_mkt_conv_msgs_updated_at ON public.marketing_conversation_messages;
 CREATE TRIGGER set_mkt_conv_msgs_updated_at BEFORE UPDATE ON public.marketing_conversation_messages FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 15. AUTOMATION WORKFLOWS
@@ -373,9 +440,12 @@ CREATE TABLE IF NOT EXISTS public.automation_workflows (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.automation_workflows TO authenticated;
 GRANT ALL ON public.automation_workflows TO service_role;
 ALTER TABLE public.automation_workflows ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS automation_workflows_select ON public.automation_workflows;
 CREATE POLICY automation_workflows_select ON public.automation_workflows FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS automation_workflows_write ON public.automation_workflows;
 CREATE POLICY automation_workflows_write ON public.automation_workflows FOR ALL TO authenticated USING (private.is_org_admin(organization_id, auth.uid())) WITH CHECK (private.is_org_admin(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS automation_workflows_org_idx ON public.automation_workflows(organization_id);
+DROP TRIGGER IF EXISTS set_automation_workflows_updated_at ON public.automation_workflows;
 CREATE TRIGGER set_automation_workflows_updated_at BEFORE UPDATE ON public.automation_workflows FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 16. EXECUTION LOGS
@@ -393,10 +463,13 @@ CREATE TABLE IF NOT EXISTS public.execution_logs (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.execution_logs TO authenticated;
 GRANT ALL ON public.execution_logs TO service_role;
 ALTER TABLE public.execution_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS execution_logs_select ON public.execution_logs;
 CREATE POLICY execution_logs_select ON public.execution_logs FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS execution_logs_write ON public.execution_logs;
 CREATE POLICY execution_logs_write ON public.execution_logs FOR ALL TO authenticated USING (private.is_org_admin(organization_id, auth.uid())) WITH CHECK (private.is_org_admin(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS execution_logs_org_idx ON public.execution_logs(organization_id);
 CREATE INDEX IF NOT EXISTS execution_logs_workflow_idx ON public.execution_logs(workflow_id);
+DROP TRIGGER IF EXISTS set_execution_logs_updated_at ON public.execution_logs;
 CREATE TRIGGER set_execution_logs_updated_at BEFORE UPDATE ON public.execution_logs FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 17. AUDIT LOGS
@@ -417,9 +490,12 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.audit_logs TO authenticated;
 GRANT ALL ON public.audit_logs TO service_role;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS audit_logs_select ON public.audit_logs;
 CREATE POLICY audit_logs_select ON public.audit_logs FOR SELECT TO authenticated USING (private.is_org_admin(organization_id, auth.uid()));
+DROP POLICY IF EXISTS audit_logs_insert ON public.audit_logs;
 CREATE POLICY audit_logs_insert ON public.audit_logs FOR INSERT TO authenticated WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS audit_logs_org_idx ON public.audit_logs(organization_id);
+DROP TRIGGER IF EXISTS set_audit_logs_updated_at ON public.audit_logs;
 CREATE TRIGGER set_audit_logs_updated_at BEFORE UPDATE ON public.audit_logs FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 18. ACTIVITIES
@@ -437,10 +513,13 @@ CREATE TABLE IF NOT EXISTS public.activities (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.activities TO authenticated;
 GRANT ALL ON public.activities TO service_role;
 ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS activities_select ON public.activities;
 CREATE POLICY activities_select ON public.activities FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS activities_insert ON public.activities;
 CREATE POLICY activities_insert ON public.activities FOR INSERT TO authenticated WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS activities_org_idx ON public.activities(organization_id);
 CREATE INDEX IF NOT EXISTS activities_entity_idx ON public.activities(entity_id);
+DROP TRIGGER IF EXISTS set_activities_updated_at ON public.activities;
 CREATE TRIGGER set_activities_updated_at BEFORE UPDATE ON public.activities FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 19. FILES
@@ -462,9 +541,12 @@ CREATE TABLE IF NOT EXISTS public.files (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.files TO authenticated;
 GRANT ALL ON public.files TO service_role;
 ALTER TABLE public.files ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS files_select ON public.files;
 CREATE POLICY files_select ON public.files FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS files_write ON public.files;
 CREATE POLICY files_write ON public.files FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS files_org_idx ON public.files(organization_id);
+DROP TRIGGER IF EXISTS set_files_updated_at ON public.files;
 CREATE TRIGGER set_files_updated_at BEFORE UPDATE ON public.files FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 20. MILESTONES
@@ -485,9 +567,12 @@ CREATE TABLE IF NOT EXISTS public.milestones (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.milestones TO authenticated;
 GRANT ALL ON public.milestones TO service_role;
 ALTER TABLE public.milestones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS milestones_select ON public.milestones;
 CREATE POLICY milestones_select ON public.milestones FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS milestones_write ON public.milestones;
 CREATE POLICY milestones_write ON public.milestones FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS milestones_project_idx ON public.milestones(project_id);
+DROP TRIGGER IF EXISTS set_milestones_updated_at ON public.milestones;
 CREATE TRIGGER set_milestones_updated_at BEFORE UPDATE ON public.milestones FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 21. PROJECT TEMPLATES
@@ -507,9 +592,12 @@ CREATE TABLE IF NOT EXISTS public.project_templates (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.project_templates TO authenticated;
 GRANT ALL ON public.project_templates TO service_role;
 ALTER TABLE public.project_templates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS project_templates_select ON public.project_templates;
 CREATE POLICY project_templates_select ON public.project_templates FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS project_templates_write ON public.project_templates;
 CREATE POLICY project_templates_write ON public.project_templates FOR ALL TO authenticated USING (private.is_org_admin(organization_id, auth.uid())) WITH CHECK (private.is_org_admin(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS project_templates_org_idx ON public.project_templates(organization_id);
+DROP TRIGGER IF EXISTS set_project_templates_updated_at ON public.project_templates;
 CREATE TRIGGER set_project_templates_updated_at BEFORE UPDATE ON public.project_templates FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 22. CONTACTS
@@ -528,9 +616,12 @@ CREATE TABLE IF NOT EXISTS public.contacts (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.contacts TO authenticated;
 GRANT ALL ON public.contacts TO service_role;
 ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS contacts_select ON public.contacts;
 CREATE POLICY contacts_select ON public.contacts FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS contacts_write ON public.contacts;
 CREATE POLICY contacts_write ON public.contacts FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS contacts_client_idx ON public.contacts(client_id);
+DROP TRIGGER IF EXISTS set_contacts_updated_at ON public.contacts;
 CREATE TRIGGER set_contacts_updated_at BEFORE UPDATE ON public.contacts FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- 23. COMMENTS
@@ -547,8 +638,44 @@ CREATE TABLE IF NOT EXISTS public.comments (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.comments TO authenticated;
 GRANT ALL ON public.comments TO service_role;
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS comments_select ON public.comments;
 CREATE POLICY comments_select ON public.comments FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS comments_write ON public.comments;
 CREATE POLICY comments_write ON public.comments FOR ALL TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
 CREATE INDEX IF NOT EXISTS comments_entity_idx ON public.comments(entity_id);
 CREATE INDEX IF NOT EXISTS comments_org_idx ON public.comments(organization_id);
+DROP TRIGGER IF EXISTS set_comments_updated_at ON public.comments;
 CREATE TRIGGER set_comments_updated_at BEFORE UPDATE ON public.comments FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
+
+-- ============================================================================
+-- TEAM MEMBER REQUESTS (Approval system for joining teams)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.team_member_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  team_id uuid NOT NULL REFERENCES public.teams(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role_in_team text NOT NULL DEFAULT 'Member',
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  message text NOT NULL DEFAULT '',
+  reviewed_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  reviewed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.team_member_requests TO authenticated;
+GRANT ALL ON public.team_member_requests TO service_role;
+ALTER TABLE public.team_member_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS team_member_requests_select ON public.team_member_requests;
+CREATE POLICY team_member_requests_select ON public.team_member_requests FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS team_member_requests_insert ON public.team_member_requests;
+CREATE POLICY team_member_requests_insert ON public.team_member_requests FOR INSERT TO authenticated WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS team_member_requests_update ON public.team_member_requests;
+CREATE POLICY team_member_requests_update ON public.team_member_requests FOR UPDATE TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS team_member_requests_delete ON public.team_member_requests;
+CREATE POLICY team_member_requests_delete ON public.team_member_requests FOR DELETE TO authenticated USING (private.is_org_admin(organization_id, auth.uid()));
+CREATE INDEX IF NOT EXISTS team_member_requests_org_idx ON public.team_member_requests(organization_id);
+CREATE INDEX IF NOT EXISTS team_member_requests_team_idx ON public.team_member_requests(team_id);
+CREATE INDEX IF NOT EXISTS team_member_requests_user_idx ON public.team_member_requests(user_id);
+CREATE INDEX IF NOT EXISTS team_member_requests_status_idx ON public.team_member_requests(status);
+

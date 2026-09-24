@@ -1,18 +1,27 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Check, Clock, Plus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
 import { FormDrawer } from "@/components/shared/form-drawer";
 import { PermissionGuard } from "@/components/shared/permission-guard";
 import { SkeletonGrid } from "@/components/shared/states";
-import { UserAvatarGroup, userName } from "@/components/shared/user-avatar";
+import { UserAvatarGroup, UserCell, userName } from "@/components/shared/user-avatar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTeamMembers, useTeams, useUsers } from "@/hooks/use-data";
+import {
+  useTeamMembers,
+  useTeams,
+  useUsers,
+  useTeamMemberRequests,
+  useReviewTeamMemberRequest,
+} from "@/hooks/use-data";
+import { useWorkspace } from "@/app/workspace";
+import { fromNow } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/teams")({
   head: () => ({
@@ -28,12 +37,22 @@ export const Route = createFileRoute("/admin/teams")({
 
 function AdminTeamsPage() {
   const { data: teams = [], isLoading } = useTeams();
-
+  const { data: requests = [] } = useTeamMemberRequests();
+  const pendingRequests = requests.filter((r) => r.status === "pending");
 
   return (
     <PermissionGuard permission="team.manage" mode="page">
-      <div className="mx-auto max-w-[1400px]">
-        <PageHeader title="Teams management" description="How the organisation is grouped for delivery." actions={<NewTeamDrawer />} />
+      <div className="mx-auto max-w-[1400px] space-y-6">
+        <PageHeader
+          title="Teams management"
+          description="How the organisation is grouped for delivery."
+          actions={<NewTeamDrawer />}
+        />
+
+        {pendingRequests.length > 0 ? (
+          <TeamMemberRequestsPanel requests={pendingRequests} teams={teams} />
+        ) : null}
+
         {isLoading ? (
           <SkeletonGrid />
         ) : (
@@ -45,6 +64,111 @@ function AdminTeamsPage() {
         )}
       </div>
     </PermissionGuard>
+  );
+}
+
+function TeamMemberRequestsPanel({
+  requests,
+  teams,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  requests: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  teams: any[];
+}) {
+  const { currentUser, roleName } = useWorkspace();
+  const reviewMutation = useReviewTeamMemberRequest();
+
+  const canApprove =
+    roleName === "Organization Owner" ||
+    roleName === "Admin" ||
+    roleName === "Project Manager" ||
+    roleName === "Team Lead";
+
+  function handleApprove(requestId: string) {
+    reviewMutation.mutate(
+      { id: requestId, status: "approved", reviewerId: currentUser.id },
+      {
+        onSuccess: () => toast.success("Team member request approved! Member added to the team."),
+        onError: () => toast.error("Failed to approve request."),
+      },
+    );
+  }
+
+  function handleReject(requestId: string) {
+    reviewMutation.mutate(
+      { id: requestId, status: "rejected", reviewerId: currentUser.id },
+      {
+        onSuccess: () => toast.success("Team member request rejected."),
+        onError: () => toast.error("Failed to reject request."),
+      },
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Clock className="size-4 text-amber-500" />
+          <h2 className="text-sm font-semibold text-foreground">Pending Team Member Requests</h2>
+          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-500">
+            {requests.length} awaiting approval
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground hidden sm:block">
+          Admins, Managers & Owners can approve new team members.
+        </p>
+      </div>
+
+      <div className="divide-y rounded-lg border bg-surface">
+        {requests.map((r) => {
+          const team = teams.find((t) => t.id === r.team_id);
+          return (
+            <div key={r.id} className="flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <UserCell userId={r.user_id} subtitle={r.role_in_team || "Team Member"} />
+                  <span className="text-xs text-muted-foreground">requested to join</span>
+                  <Badge variant="secondary" className="font-semibold">
+                    {team?.name ?? "Team"}
+                  </Badge>
+                </div>
+                {r.message ? (
+                  <p className="pl-10 text-xs italic text-muted-foreground">"{r.message}"</p>
+                ) : null}
+                <p className="pl-10 text-[11px] text-muted-foreground">
+                  Submitted {fromNow(r.created_at)}
+                </p>
+              </div>
+
+              {canApprove ? (
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 text-white hover:bg-emerald-700"
+                    disabled={reviewMutation.isPending}
+                    onClick={() => handleApprove(r.id)}
+                  >
+                    <Check className="mr-1 size-3.5" /> Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive hover:bg-destructive/10"
+                    disabled={reviewMutation.isPending}
+                    onClick={() => handleReject(r.id)}
+                  >
+                    <X className="mr-1 size-3.5" /> Reject
+                  </Button>
+                </div>
+              ) : (
+                <Badge variant="outline">Requires Manager/Admin Approval</Badge>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -60,9 +184,19 @@ function TeamCard({
   leadId: string;
 }) {
   const { data: members = [] } = useTeamMembers(teamId);
+  const { data: requests = [] } = useTeamMemberRequests(teamId);
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
+
   return (
     <article className="surface-card p-5">
-      <h3 className="text-sm font-semibold">{name}</h3>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-sm font-semibold">{name}</h3>
+        {pendingCount > 0 ? (
+          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-500 text-[10px]">
+            {pendingCount} request{pendingCount > 1 ? "s" : ""}
+          </Badge>
+        ) : null}
+      </div>
       <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       <p className="mt-3 text-xs text-muted-foreground">Lead · {userName(leadId)}</p>
       <div className="mt-4 flex items-center justify-between">

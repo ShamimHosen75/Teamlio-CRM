@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { services } from "@/services";
 import { useOrgId, useWorkspace } from "@/app/workspace";
-import type { Client, DailyWorkUpdate, Deal, FileRecord, Lead, LeaveRequest, Meeting, Payment, Project, Task } from "@/lib/types";
+import type { Client, DailyWorkUpdate, Deal, FileRecord, Lead, LeaveRequest, Meeting, Payment, Project, Task, TeamMemberRequest } from "@/lib/types";
 
 /** Throw early when the org ID hasn't resolved yet (avoids silent RLS failures). */
 function requireOrg(org: string): asserts org is string {
@@ -176,6 +176,41 @@ export function useTeamMembers(teamId?: string) {
   return useQuery({
     queryKey: ["team-members", org, teamId ?? "all"],
     queryFn: () => services.people.getTeamMembers(org, teamId),
+  });
+}
+
+export function useTeamMemberRequests(teamId?: string) {
+  const org = useOrgId();
+  return useQuery({
+    queryKey: ["team-member-requests", org, teamId ?? "all"],
+    queryFn: () => services.people.getTeamMemberRequests(org, teamId),
+  });
+}
+
+export function useCreateTeamMemberRequest() {
+  const qc = useQueryClient();
+  const org = useOrgId();
+  return useMutation({
+    mutationFn: (input: Partial<TeamMemberRequest>) =>
+      services.people.createTeamMemberRequest(org, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team-member-requests"] });
+    },
+  });
+}
+
+export function useReviewTeamMemberRequest() {
+  const qc = useQueryClient();
+  const org = useOrgId();
+  return useMutation({
+    mutationFn: (input: { id: string; status: "approved" | "rejected"; reviewerId: string }) =>
+      services.people.reviewTeamMemberRequest(org, input.id, input.status, input.reviewerId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team-member-requests"] });
+      qc.invalidateQueries({ queryKey: ["team-members"] });
+      qc.invalidateQueries({ queryKey: ["teams"] });
+      qc.invalidateQueries({ queryKey: ["cloud"] });
+    },
   });
 }
 

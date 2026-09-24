@@ -88,7 +88,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [baseUser, user, profile, profileOverride]);
 
   const defaultRole = roles.find((r) => r.id === baseUser.role_id)?.name ?? "Organization Owner";
-  const [demoRoleName, setRoleName] = useState(defaultRole);
+  const [demoRoleName, setDemoRoleName] = useState(defaultRole);
 
   const { activeOrgId } = useActiveOrg();
   const { data: membership } = useMyMembership(activeOrgId);
@@ -104,7 +104,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       ? "Team Member"
       : undefined;
 
-  const roleName = liveRoleName ?? requestedRoleName ?? demoRoleName;
+  // Logged-in users' role is strictly their live membership or signup role, not manually switchable.
+  const roleName = user ? (liveRoleName ?? requestedRoleName ?? "Team Member") : demoRoleName;
+
+  const setRoleName = useCallback((role: string) => {
+    // Only permit switching in unauthenticated demo mode
+    if (!user) {
+      setDemoRoleName(role);
+    }
+  }, [user]);
 
   const permissions = useMemo(() => ROLE_PERMISSIONS[roleName] ?? [], [roleName]);
   const can = useCallback((permission: Permission) => permissions.includes(permission), [permissions]);
@@ -118,7 +126,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         id: o.id,
         name: o.name,
         slug: o.slug,
-        logo_url: o.logo_url ?? null,
+        currency: "USD",
+        timezone: "UTC",
+        logo_url: (o as any).logo_url ?? null,
         owner_user_id: o.owner_id ?? "",
         plan: "Professional" as const,
         billing_email: "",
@@ -135,7 +145,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         id: activeOrg.id,
         name: activeOrg.name,
         slug: activeOrg.slug,
-        logo_url: activeOrg.logo_url ?? null,
+        currency: "USD",
+        timezone: "UTC",
+        logo_url: (activeOrg as any).logo_url ?? null,
         owner_user_id: activeOrg.owner_id ?? "",
         plan: "Professional" as const,
         billing_email: "",

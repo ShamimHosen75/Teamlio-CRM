@@ -105,11 +105,11 @@ function SettingsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Field label="Time zone" value={org.timezone} onChange={(v) => setOrg({ ...org, timezone: v })} />
+                <Field label="Time zone" value={org.timezone ?? ""} onChange={(v) => setOrg({ ...org, timezone: v })} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="addr">Address</Label>
-                <Textarea id="addr" rows={3} value={org.address} onChange={(e) => setOrg({ ...org, address: e.target.value })} />
+                <Textarea id="addr" rows={3} value={org.address ?? ""} onChange={(e) => setOrg({ ...org, address: e.target.value })} />
               </div>
               <Button size="sm" onClick={() => toast.success("Organisation settings saved")}>Save changes</Button>
             </div>

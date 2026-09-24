@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
@@ -189,7 +189,18 @@ function MemberCard({ member, canManage, onRole, onStatus, onRemove }: {
       </div>
       <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-xs text-muted-foreground">
         <span>{ORG_ROLE_TO_ROLE_NAME[member.role]} · joined {fmtDate(member.created_at)}</span>
-        {editable ? <ConfirmDialog trigger={<Button variant="ghost" size="sm">Remove</Button>} title={`Remove ${name}?`} description="They lose access to this workspace immediately. You can invite them again later." confirmLabel="Remove" destructive onConfirm={onRemove} /> : null}
+        <div className="flex items-center gap-1.5">
+          {editable && member.status !== "active" ? (
+            <Button
+              size="sm"
+              className="h-7 bg-emerald-600 px-2 text-xs text-white hover:bg-emerald-700"
+              onClick={() => onStatus("active")}
+            >
+              <Check className="mr-1 size-3" /> Approve
+            </Button>
+          ) : null}
+          {editable ? <ConfirmDialog trigger={<Button variant="ghost" size="sm">Remove</Button>} title={`Remove ${name}?`} description="They lose access to this workspace immediately. You can invite them again later." confirmLabel="Remove" destructive onConfirm={onRemove} /> : null}
+        </div>
       </div>
     </article>
   );
@@ -235,22 +246,33 @@ function MemberRow({
       </td>
       <td className="px-4 py-3 text-xs text-muted-foreground">{ORG_ROLE_TO_ROLE_NAME[member.role]}</td>
       <td className="px-4 py-3">
-        {canManage && member.role !== "owner" ? (
-          <Select value={member.status} onValueChange={(v) => onStatus(v as (typeof MEMBER_STATUSES)[number])}>
-            <SelectTrigger className="w-[130px]" aria-label={`Status for ${name}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MEMBER_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <Badge variant="secondary">{member.status}</Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {canManage && member.role !== "owner" ? (
+            <Select value={member.status} onValueChange={(v) => onStatus(v as (typeof MEMBER_STATUSES)[number])}>
+              <SelectTrigger className="w-[130px]" aria-label={`Status for ${name}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MEMBER_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Badge variant="secondary">{member.status}</Badge>
+          )}
+          {canManage && member.status !== "active" ? (
+            <Button
+              size="sm"
+              className="h-8 bg-emerald-600 px-2.5 text-xs text-white hover:bg-emerald-700"
+              onClick={() => onStatus("active")}
+            >
+              <Check className="mr-1 size-3" /> Approve
+            </Button>
+          ) : null}
+        </div>
       </td>
       <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDate(member.created_at)}</td>
       <td className="px-4 py-3 text-right">

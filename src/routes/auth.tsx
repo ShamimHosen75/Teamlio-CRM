@@ -11,9 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const SIGNUP_ROLES = [
-  { value: "admin", label: "Admin" },
-  { value: "manager", label: "Manager" },
-  { value: "member", label: "Employees" },
+  { value: "member", label: "Team Member / Employee" },
+  { value: "manager", label: "Project Manager" },
+  { value: "admin", label: "Workspace Administrator" },
 ] as const;
 
 export const Route = createFileRoute("/auth")({
@@ -137,7 +137,7 @@ function AuthPage() {
                   <Input id="full-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Ayesha Rahman" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="requested-role">Requested role</Label>
+                  <Label htmlFor="requested-role">Select your role</Label>
                   <Select value={requestedRole} onValueChange={setRequestedRole}>
                     <SelectTrigger id="requested-role" className="w-full">
                       <SelectValue placeholder="Select a role" />
@@ -151,7 +151,7 @@ function AuthPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Your workspace owner confirms access. Invitations always use their assigned role.
+                    Your role is assigned on account creation and determines your workspace privileges.
                   </p>
                 </div>
               </>

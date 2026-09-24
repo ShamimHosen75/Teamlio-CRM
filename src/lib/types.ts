@@ -18,8 +18,14 @@ export interface Organization {
   id: ID;
   name: string;
   slug: string;
-  currency: string;
-  timezone: string;
+  currency?: string;
+  timezone?: string;
+  logo_url?: string | null;
+  owner_user_id?: string;
+  plan?: string;
+  billing_email?: string;
+  max_members?: number;
+  address?: string;
   created_at: string;
   updated_at: string;
 }
@@ -63,6 +69,20 @@ export interface TeamMember extends BaseEntity {
   team_id: ID;
   user_id: ID;
   role_in_team: string;
+}
+
+export type TeamMemberRequestStatus = "pending" | "approved" | "rejected";
+
+export interface TeamMemberRequest extends BaseEntity {
+  team_id: ID;
+  user_id: ID;
+  role_in_team: string;
+  status: TeamMemberRequestStatus;
+  message: string;
+  reviewed_by?: ID | null;
+  reviewed_at?: string | null;
+  user?: User;
+  team?: Team;
 }
 
 /* ---------------------------------- crm --------------------------------- */
@@ -114,6 +134,8 @@ export interface Client extends BaseEntity {
   owner_user_id: ID;
   status: ClientStatus;
   industry: string;
+  tags?: string[];
+  notes?: string;
 }
 
 export interface Contact extends BaseEntity {
@@ -143,6 +165,7 @@ export interface Deal extends BaseEntity {
   stage: DealStage;
   expected_close_date: string;
   owner_user_id: ID;
+  notes?: string;
 }
 
 /* -------------------------------- projects ------------------------------- */

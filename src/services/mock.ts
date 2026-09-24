@@ -2,11 +2,14 @@ import type { AppServices } from "./interfaces";
 import type {
   Client,
   DailyWorkUpdate,
+  Deal,
   Lead,
   LeaveRequest,
+  Meeting,
   Payment,
   Project,
   Task,
+  TeamMemberRequest,
 } from "@/lib/types";
 import { CURRENT_USER_ID, LEAVE_TYPES, delay, nowIso, scope, store, uid } from "./store";
 
@@ -196,6 +199,8 @@ export const mockServices: AppServices = {
         name: input.name || "Client",
         email: input.email || "",
         phone: input.phone || "",
+        website: input.website || "",
+        address: input.address || "",
         status: input.status || "Active",
         industry: input.industry || "General",
         tags: [],
@@ -220,7 +225,8 @@ export const mockServices: AppServices = {
         ...meta(org),
         title: input.title || "Untitled Deal",
         client_id: input.client_id || "",
-        stage: input.stage || "Discovery",
+        pipeline: input.pipeline || "Sales",
+        stage: input.stage || "New Opportunity",
         value: input.value || 0,
         probability: input.probability || 50,
         expected_close_date: input.expected_close_date || nowIso().slice(0, 10),
@@ -313,6 +319,64 @@ export const mockServices: AppServices = {
           pending: mine.filter((l) => l.leave_type === type && l.status === "Pending").reduce((s, l) => s + l.duration_days, 0),
         })),
       );
+    },
+    async getTeamMemberRequests(org, teamId) {
+      const rows = scope(store.teamMemberRequests, org);
+      const filtered = teamId ? rows.filter((r) => r.team_id === teamId) : rows;
+      const populated = filtered.map((r) => ({
+        ...r,
+        user: store.users.find((u) => u.id === r.user_id),
+        team: store.teams.find((t) => t.id === r.team_id),
+      }));
+      return delay(populated);
+    },
+    async createTeamMemberRequest(org, input) {
+      const req: TeamMemberRequest = {
+        id: uid("tmr"),
+        organization_id: org,
+        team_id: input.team_id!,
+        user_id: input.user_id || CURRENT_USER_ID,
+        role_in_team: input.role_in_team || "Member",
+        status: "pending",
+        message: input.message || "",
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      };
+      store.teamMemberRequests = [req, ...store.teamMemberRequests];
+      return delay({
+        ...req,
+        user: store.users.find((u) => u.id === req.user_id),
+        team: store.teams.find((t) => t.id === req.team_id),
+      });
+    },
+    async reviewTeamMemberRequest(org, id, status, reviewerId) {
+      const existing = store.teamMemberRequests.find((r) => r.id === id);
+      if (!existing) throw new Error("Request not found");
+      existing.status = status;
+      existing.reviewed_by = reviewerId;
+      existing.reviewed_at = nowIso();
+      existing.updated_at = nowIso();
+
+      if (status === "approved") {
+        const alreadyMember = store.teamMembers.some((tm) => tm.team_id === existing.team_id && tm.user_id === existing.user_id);
+        if (!alreadyMember) {
+          store.teamMembers.push({
+            id: uid("tm"),
+            organization_id: org,
+            team_id: existing.team_id,
+            user_id: existing.user_id,
+            role_in_team: existing.role_in_team,
+            created_at: nowIso(),
+            updated_at: nowIso(),
+          });
+        }
+      }
+
+      return delay({
+        ...existing,
+        user: store.users.find((u) => u.id === existing.user_id),
+        team: store.teams.find((t) => t.id === existing.team_id),
+      });
     },
   },
 

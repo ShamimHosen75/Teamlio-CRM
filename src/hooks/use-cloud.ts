@@ -131,15 +131,18 @@ export function useMyMembership(organizationId: string | undefined) {
         .maybeSingle();
 
       if (org && org.owner_id === user.id) {
+        // Resolve the user's designation from their sign-up metadata
+        const requestedRole = user.user_metadata?.requested_role as string | undefined;
+        const resolved = resolveRequestedRole(requestedRole);
         try {
           const { data: healed } = await supabase
             .from("organization_members")
             .upsert({
               organization_id: organizationId,
               user_id: user.id,
-              role: "owner" as OrgRole,
+              role: resolved.role,
               status: "active",
-              job_title: "Workspace Owner",
+              job_title: resolved.jobTitle,
             }, { onConflict: "organization_id,user_id" })
             .select()
             .maybeSingle();
@@ -149,9 +152,9 @@ export function useMyMembership(organizationId: string | undefined) {
             id: `temp-${user.id}`,
             organization_id: organizationId,
             user_id: user.id,
-            role: "owner" as OrgRole,
+            role: resolved.role,
             status: "active" as const,
-            job_title: "Workspace Owner",
+            job_title: resolved.jobTitle,
             created_at: new Date().toISOString(),
           };
         }
@@ -313,6 +316,20 @@ function slugify(name: string) {
     .slice(0, 40)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
+/** Map a requested_role string to the org_role enum and a display job title. */
+function resolveRequestedRole(requestedRole: string | undefined): { role: OrgRole; jobTitle: string } {
+  switch (requestedRole) {
+    case "admin":
+      return { role: "admin", jobTitle: "Administrator" };
+    case "manager":
+      return { role: "manager", jobTitle: "Project Manager" };
+    case "member":
+      return { role: "member", jobTitle: "Team Member" };
+    default:
+      return { role: "owner", jobTitle: "Workspace Owner" };
+  }
+}
+
 export function useCreateOrganization() {
   const qc = useQueryClient();
   const { user } = useSession();
@@ -326,14 +343,18 @@ export function useCreateOrganization() {
         .single();
       if (error) throw error;
 
-      // Add creator to organization_members as owner
+      // Resolve the user's chosen designation from sign-up metadata
+      const requestedRole = user.user_metadata?.requested_role as string | undefined;
+      const { role, jobTitle } = resolveRequestedRole(requestedRole);
+
+      // Add creator to organization_members with their chosen role & designation
       try {
         await supabase.from("organization_members").upsert({
           organization_id: data.id,
           user_id: user.id,
-          role: "owner" as OrgRole,
+          role,
           status: "active",
-          job_title: "Workspace Owner",
+          job_title: jobTitle,
         }, { onConflict: "organization_id,user_id" });
       } catch {
         // Continue even if member insert has edge cases

@@ -32,6 +32,7 @@ import type {
   ScheduledContent,
   Task,
   Team,
+  TeamMemberRequest,
   User,
 } from "@/lib/types";
 
@@ -85,6 +86,9 @@ export interface PeopleService {
   createLeaveRequest(organizationId: string, input: Partial<LeaveRequest>): Promise<LeaveRequest>;
   updateLeaveRequest(organizationId: string, id: string, input: Partial<LeaveRequest>): Promise<LeaveRequest>;
   getLeaveBalance(organizationId: string, userId: string): Promise<LeaveBalance[]>;
+  getTeamMemberRequests(organizationId: string, teamId?: string): Promise<TeamMemberRequest[]>;
+  createTeamMemberRequest(organizationId: string, input: Partial<TeamMemberRequest>): Promise<TeamMemberRequest>;
+  reviewTeamMemberRequest(organizationId: string, id: string, status: "approved" | "rejected", reviewerId: string): Promise<TeamMemberRequest>;
 }
 
 export interface CommunicationService {

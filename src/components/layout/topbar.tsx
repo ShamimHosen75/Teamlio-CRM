@@ -9,12 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -24,7 +19,6 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UserAvatar } from "@/components/shared/user-avatar";
 import { useWorkspace } from "@/app/workspace";
 import { useNotifications } from "@/hooks/use-data";
-import { ROLE_NAMES } from "@/lib/permissions";
 import { fromNow } from "@/lib/format";
 
 export function Topbar({
@@ -36,7 +30,7 @@ export function Topbar({
   onOpenMobileNav: () => void;
   collapsed: boolean;
 }) {
-  const { organization, organizations, setOrganizationId, currentUser, roleName, setRoleName } = useWorkspace();
+  const { organization, organizations, setOrganizationId, currentUser, roleName } = useWorkspace();
   const { data: notifications = [] } = useNotifications();
   const unread = notifications.filter((n) => !n.read);
   const { user } = useSession();
@@ -128,24 +122,20 @@ export function Topbar({
             <UserAvatar userId={currentUser.id} name={currentUser.full_name} size="sm" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-60">
-          <DropdownMenuLabel>
-            <p className="text-sm font-medium">{currentUser.full_name}</p>
-            <p className="text-xs font-normal text-muted-foreground">{currentUser.email}</p>
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuLabel className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-sm font-semibold">{currentUser.full_name}</p>
+              <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-primary">
+                {roleName}
+              </span>
+            </div>
+            <p className="truncate text-xs font-normal text-muted-foreground">{currentUser.email}</p>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Preview role: {roleName}</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuRadioGroup value={roleName} onValueChange={setRoleName}>
-                {ROLE_NAMES.map((r) => (
-                  <DropdownMenuRadioItem key={r} value={r}>
-                    {r}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          <div className="px-2 py-1.5 text-xs text-muted-foreground">
+            Current role: <span className="font-semibold text-foreground">{roleName}</span>
+          </div>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
             <Link to="/admin/workspace">Workspace Admin</Link>
