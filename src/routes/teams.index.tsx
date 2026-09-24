@@ -122,12 +122,10 @@ function TeamsPage() {
   const { data: tasks = [] } = useTasks();
   const { data: users = [] } = useUsers();
   const { can } = usePermissions();
-  const canManage = can("team.manage");
-
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (create) {
+    if (create || (typeof window !== "undefined" && window.location.search.includes("create=true"))) {
       setCreateDialogOpen(true);
     }
   }, [create]);
@@ -139,11 +137,9 @@ function TeamsPage() {
           title="Teams"
           description="How delivery capacity is organised across the organisation."
           actions={
-            canManage ? (
-              <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
-                <Plus className="size-4" /> Create Team
-              </Button>
-            ) : null
+            <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
+              <Plus className="size-4" /> Create Team
+            </Button>
           }
         />
 
@@ -155,11 +151,9 @@ function TeamsPage() {
             title="No teams created yet"
             description="Organise your delivery capacity into dedicated functional teams such as Web Development, Digital Marketing, Graphics Design, Video Editing, or custom squads."
             action={
-              canManage ? (
-                <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
-                  <Plus className="size-4" /> Create First Team
-                </Button>
-              ) : null
+              <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
+                <Plus className="size-4" /> Create First Team
+              </Button>
             }
           />
         ) : (
@@ -392,7 +386,7 @@ function CreateTeamModal({
             {/* Team Name */}
             <div className="space-y-1.5">
               <Label htmlFor="team-name" className="text-sm font-medium">
-                Team Name <span className="text-destructive">*</span>
+                Team Title / Team Name <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="team-name"

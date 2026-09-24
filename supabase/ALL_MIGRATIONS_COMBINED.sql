@@ -648,6 +648,51 @@ DROP TRIGGER IF EXISTS set_comments_updated_at ON public.comments;
 CREATE TRIGGER set_comments_updated_at BEFORE UPDATE ON public.comments FOR EACH ROW EXECUTE FUNCTION public.set_record_updated_at();
 
 -- ============================================================================
+-- TEAMS AND TEAM MEMBERS
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.teams (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  lead_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.teams TO authenticated;
+GRANT ALL ON public.teams TO service_role;
+ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS teams_select ON public.teams;
+CREATE POLICY teams_select ON public.teams FOR SELECT TO authenticated USING (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS teams_insert ON public.teams;
+CREATE POLICY teams_insert ON public.teams FOR INSERT TO authenticated WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS teams_update ON public.teams;
+CREATE POLICY teams_update ON public.teams FOR UPDATE TO authenticated USING (private.is_org_member(organization_id, auth.uid())) WITH CHECK (private.is_org_member(organization_id, auth.uid()));
+DROP POLICY IF EXISTS teams_delete ON public.teams;
+CREATE POLICY teams_delete ON public.teams FOR DELETE TO authenticated USING (private.is_org_admin(organization_id, auth.uid()));
+CREATE INDEX IF NOT EXISTS teams_org_idx ON public.teams(organization_id);
+
+CREATE TABLE IF NOT EXISTS public.team_members (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id uuid NOT NULL REFERENCES public.teams(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role_in_team text NOT NULL DEFAULT 'Member',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (team_id, user_id)
+);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.team_members TO authenticated;
+GRANT ALL ON public.team_members TO service_role;
+ALTER TABLE public.team_members ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS team_members_select ON public.team_members;
+CREATE POLICY team_members_select ON public.team_members FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.teams t WHERE t.id = team_id AND private.is_org_member(t.organization_id, auth.uid())));
+DROP POLICY IF EXISTS team_members_write ON public.team_members;
+CREATE POLICY team_members_write ON public.team_members FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.teams t WHERE t.id = team_id AND private.is_org_member(t.organization_id, auth.uid())))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.teams t WHERE t.id = team_id AND private.is_org_member(t.organization_id, auth.uid())));
+CREATE INDEX IF NOT EXISTS team_members_team_idx ON public.team_members(team_id);
+CREATE INDEX IF NOT EXISTS team_members_user_idx ON public.team_members(user_id);
+
+-- ============================================================================
 -- TEAM MEMBER REQUESTS (Approval system for joining teams)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS public.team_member_requests (

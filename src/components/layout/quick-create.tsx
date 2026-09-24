@@ -14,7 +14,7 @@ import { usePermissions } from "@/app/workspace";
 import type { Permission } from "@/lib/permissions";
 
 const OPTIONS: { label: string; to: string; permission?: Permission; search?: Record<string, string> }[] = [
-  { label: "Team", to: "/teams", search: { create: "true" }, permission: "team.read" },
+  { label: "Team", to: "/teams", search: { create: "true" } },
   { label: "Project", to: "/projects", permission: "project.create" },
   { label: "Task", to: "/tasks", permission: "task.create" },
   { label: "Lead", to: "/crm/leads", permission: "lead.create" },
