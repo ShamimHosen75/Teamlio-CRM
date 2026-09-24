@@ -119,10 +119,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const { activeOrg, orgs: liveOrgs } = useActiveOrg();
 
-  // Build organization list: prefer live Supabase orgs when authenticated
-  const liveOrganizations: Organization[] = useMemo(
-    () =>
-      liveOrgs.map((o: CloudOrganization) => ({
+  // Build organization list: prefer live Supabase orgs when authenticated, deduplicated
+  const liveOrganizations: Organization[] = useMemo(() => {
+    const seen = new Set<string>();
+    return liveOrgs
+      .filter((o: CloudOrganization) => {
+        const key = (o.name || "").trim().toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((o: CloudOrganization) => ({
         id: o.id,
         name: o.name,
         slug: o.slug,
@@ -135,9 +142,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         max_members: 100,
         created_at: o.created_at ?? "",
         updated_at: o.updated_at ?? "",
-      })),
-    [liveOrgs],
-  );
+      }));
+  }, [liveOrgs]);
 
   const resolvedOrganization = useMemo<Organization>(() => {
     if (activeOrg) {

@@ -64,6 +64,27 @@ export function useMyProfile() {
   });
 }
 
+/** Fetches all created account user profiles across the system */
+export function useAllProfiles() {
+  const { user } = useSession();
+  return useQuery({
+    queryKey: ["cloud", "all_profiles"],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: true });
+      if (error) {
+        console.warn("Could not query all profiles:", error.message);
+        return [];
+      }
+      return (data ?? []) as CloudProfile[];
+    },
+    staleTime: 30000,
+  });
+}
+
 export function useMyOrganizations() {
   const { user } = useSession();
   return useQuery({

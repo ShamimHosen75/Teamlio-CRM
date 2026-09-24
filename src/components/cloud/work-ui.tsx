@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Building2, Plus, User, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,14 +7,27 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FormDrawer } from "@/components/shared/form-drawer";
+import { useWorkspace } from "@/app/workspace";
+import { store } from "@/services/store";
 import {
   PROJECT_STATUSES,
   TASK_STATUSES,
   WORK_PRIORITIES,
+  useAllProfiles,
   useCreateProject,
   useCreateTask,
+  useSession,
   useUpdateProject,
   useUpdateTask,
   type CloudMember,
@@ -44,18 +57,201 @@ export function OrgSwitcher({
   value: string | undefined;
   onChange: (id: string) => void;
 }) {
-  if (!orgs.length) return null;
+  const { user } = useSession();
+  const { data: allProfiles = [] } = useAllProfiles();
+  const { currentUser, updateCurrentUser } = useWorkspace();
+  const crmStoreUsers = store.users;
+  const crmStoreRoles = store.roles;
+
+  // Deduplicate organizations by name/owner to prevent duplicate entries from cluttering
+  const uniqueOrgs = useMemo(() => {
+    const seen = new Set<string>();
+    return orgs.filter((o) => {
+      const key = `${o.name || ""}`.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [orgs]);
+
+  // Created Accounts: Supabase registered profiles + authenticated user
+  const accountUsers = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; email: string; role: string }>();
+
+    // Current auth user
+    if (user) {
+      const name = (user.user_metadata?.full_name as string) || (user.email ? user.email.split("@")[0] : "User");
+      const role = (user.user_metadata?.requested_role as string) || "Owner";
+      map.set(user.id, {
+        id: user.id,
+        name,
+        email: user.email || "",
+        role: role.charAt(0).toUpperCase() + role.slice(1),
+      });
+    }
+
+    // Profiles from Supabase database
+    for (const p of allProfiles) {
+      const name = p.full_name || (p.email ? p.email.split("@")[0] : "Member");
+      const existing = map.get(p.id);
+      map.set(p.id, {
+        id: p.id,
+        name: existing?.name || name,
+        email: p.email || existing?.email || "",
+        role: p.job_title || existing?.role || "Member",
+      });
+    }
+
+    return Array.from(map.values());
+  }, [user, allProfiles]);
+
+  // CRM Users: from CRM mock/seed data, deduplicated against created accounts
+  const crmUsers = useMemo(() => {
+    const accountEmails = new Set(accountUsers.map((a) => a.email.toLowerCase()));
+    const accountNames = new Set(accountUsers.map((a) => a.name.toLowerCase()));
+    const seen = new Set<string>();
+
+    return crmStoreUsers
+      .filter((u) => {
+        const emailKey = (u.email || "").toLowerCase();
+        const nameKey = (u.full_name || "").toLowerCase();
+        if (accountEmails.has(emailKey) || accountNames.has(nameKey) || seen.has(nameKey)) {
+          return false;
+        }
+        seen.add(nameKey);
+        return true;
+      })
+      .map((u) => {
+        const role = crmStoreRoles.find((r) => r.id === u.role_id)?.name || u.job_title || "Member";
+        return {
+          id: u.id,
+          name: u.full_name,
+          email: u.email,
+          role,
+        };
+      });
+  }, [accountUsers, crmStoreUsers, crmStoreRoles]);
+
+  // Determine active dropdown value (keyed by user or workspace)
+  const currentKey = useMemo(() => {
+    if (currentUser?.id) {
+      const match =
+        accountUsers.find((u) => u.id === currentUser.id) ||
+        crmUsers.find((u) => u.id === currentUser.id);
+      if (match) return `user_${match.id}`;
+    }
+    if (accountUsers.length > 0) return `user_${accountUsers[0].id}`;
+    if (crmUsers.length > 0) return `user_${crmUsers[0].id}`;
+    return value ? `org_${value}` : "";
+  }, [currentUser?.id, accountUsers, crmUsers, value]);
+
+  // Resolve current display name and role for trigger button
+  const displayInfo = useMemo(() => {
+    if (currentKey.startsWith("user_")) {
+      const uid = currentKey.replace("user_", "");
+      const u = accountUsers.find((x) => x.id === uid) || crmUsers.find((x) => x.id === uid);
+      if (u) return { name: u.name, role: u.role, isUser: true };
+    }
+    const currentOrg = uniqueOrgs.find((o) => `org_${o.id}` === currentKey || o.id === value);
+    if (currentOrg) return { name: currentOrg.name, role: "Workspace", isUser: false };
+    return { name: currentUser?.full_name || "Select User", role: "", isUser: true };
+  }, [currentKey, accountUsers, crmUsers, uniqueOrgs, value, currentUser?.full_name]);
+
+  const handleSelect = (val: string) => {
+    if (val.startsWith("user_")) {
+      const uid = val.replace("user_", "");
+      const targetUser =
+        accountUsers.find((u) => u.id === uid) || crmUsers.find((u) => u.id === uid);
+      if (targetUser) {
+        updateCurrentUser({
+          id: targetUser.id,
+          full_name: targetUser.name,
+          email: targetUser.email,
+          job_title: targetUser.role,
+        });
+        toast.success(`Active user: ${targetUser.name} (${targetUser.role})`);
+      }
+      if (orgs.length > 0 && onChange && (!value || !orgs.some((o) => o.id === value))) {
+        onChange(orgs[0].id);
+      }
+    } else if (val.startsWith("org_")) {
+      const orgId = val.replace("org_", "");
+      onChange(orgId);
+      const targetOrg = uniqueOrgs.find((o) => o.id === orgId);
+      if (targetOrg) toast.success(`Active workspace: ${targetOrg.name}`);
+    }
+  };
+
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-full min-w-0 sm:w-[220px]" aria-label="Organization">
-        <SelectValue placeholder="Select organization" />
+    <Select value={currentKey} onValueChange={handleSelect}>
+      <SelectTrigger className="w-full min-w-0 sm:w-[240px]" aria-label="User or workspace selection">
+        <div className="flex items-center gap-2 truncate">
+          {displayInfo.isUser ? (
+            <User className="size-4 shrink-0 text-primary" />
+          ) : (
+            <Building2 className="size-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="truncate font-medium">{displayInfo.name}</span>
+          {displayInfo.role ? (
+            <span className="hidden text-xs text-muted-foreground sm:inline truncate">
+              · {displayInfo.role}
+            </span>
+          ) : null}
+        </div>
       </SelectTrigger>
-      <SelectContent>
-        {orgs.map((o) => (
-          <SelectItem key={o.id} value={o.id}>
-            {o.name}
-          </SelectItem>
-        ))}
+      <SelectContent className="max-h-80 w-[300px]">
+        {accountUsers.length > 0 && (
+          <SelectGroup>
+            <SelectLabel className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+              <User className="size-3.5" /> Created Accounts ({accountUsers.length})
+            </SelectLabel>
+            {accountUsers.map((u) => (
+              <SelectItem key={`user_${u.id}`} value={`user_${u.id}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-medium">{u.name}</span>
+                  <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                    {u.role}
+                  </span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+
+        {crmUsers.length > 0 && (
+          <>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                <Users className="size-3.5" /> CRM Team Members ({crmUsers.length})
+              </SelectLabel>
+              {crmUsers.map((u) => (
+                <SelectItem key={`user_${u.id}`} value={`user_${u.id}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate">{u.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{u.role}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </>
+        )}
+
+        {uniqueOrgs.length > 1 && (
+          <>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                <Building2 className="size-3.5" /> Workspaces
+              </SelectLabel>
+              {uniqueOrgs.map((o) => (
+                <SelectItem key={`org_${o.id}`} value={`org_${o.id}`}>
+                  <span className="truncate">{o.name}</span>
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </>
+        )}
       </SelectContent>
     </Select>
   );

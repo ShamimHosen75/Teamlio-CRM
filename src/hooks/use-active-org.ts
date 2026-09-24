@@ -1,29 +1,54 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCreateOrganization, useMyOrganizations, useSession } from "@/hooks/use-cloud";
 
 const STORAGE_KEY = "live-active-org-id";
+let isAutoProvisioningGlobally = false;
 
 /** Shared selected organization across every live (Supabase-backed) page. */
 export function useActiveOrg() {
   const { user } = useSession();
-  const { data: orgs = [], isLoading } = useMyOrganizations();
+  const { data: rawOrgs = [], isLoading } = useMyOrganizations();
   const [orgId, setOrgIdState] = useState<string | undefined>();
   const createOrg = useCreateOrganization();
-  const provisioningRef = useRef(false);
+  const createOrgRef = useRef(createOrg);
+  createOrgRef.current = createOrg;
 
-  // Auto-provision initial workspace for new users who don't have one yet
+  // Deduplicate organizations by name/owner to prevent duplicate entries from cluttering UI
+  const orgs = useMemo(() => {
+    const seen = new Set<string>();
+    return rawOrgs.filter((o) => {
+      const key = `${o.owner_id}-${(o.name || "").trim().toLowerCase()}`;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [rawOrgs]);
+
+  // Auto-provision initial workspace once for new users who don't have one yet
   useEffect(() => {
-    if (isLoading || !user || orgs.length > 0 || provisioningRef.current) return;
-    provisioningRef.current = true;
-    const name =
+    if (isLoading || !user || rawOrgs.length > 0 || isAutoProvisioningGlobally) return;
+
+    const sessionKey = `teamlio_org_provisioned_${user.id}`;
+    if (typeof window !== "undefined" && window.sessionStorage.getItem(sessionKey)) return;
+
+    isAutoProvisioningGlobally = true;
+    if (typeof window !== "undefined") window.sessionStorage.setItem(sessionKey, "1");
+
+    const baseName =
       (user.user_metadata?.full_name as string) ||
-      (user.email ? `${user.email.split("@")[0]}'s Workspace` : "My Workspace");
-    createOrg.mutate(name, {
+      (user.email ? user.email.split("@")[0] : "My");
+    const name = `${baseName}'s Workspace`;
+
+    createOrgRef.current.mutate(name, {
       onError: () => {
-        provisioningRef.current = false;
+        isAutoProvisioningGlobally = false;
+        if (typeof window !== "undefined") window.sessionStorage.removeItem(sessionKey);
+      },
+      onSettled: () => {
+        isAutoProvisioningGlobally = false;
       },
     });
-  }, [isLoading, user, orgs.length, createOrg]);
+  }, [isLoading, user, rawOrgs.length]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
