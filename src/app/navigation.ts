@@ -114,10 +114,6 @@ export const NAV_SECTIONS: NavSection[] = [
           actionId: "new-company",
           icon: Plus,
         },
-        children: [
-          { label: "All Companies", to: "/crm/companies", icon: Layers },
-          { label: "Add Company", actionId: "new-company", icon: Plus, permission: "client.read" },
-        ],
       },
       { label: "Deals", to: "/crm/deals", icon: Handshake, permission: "deal.read" },
       { label: "Pipeline", to: "/crm/pipeline", icon: SquareKanban, permission: "deal.read" },
