@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { Download, Eye, FileText, Folder, Grid2x2, List, Share2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { fmtDate } from "@/lib/format";
 import { useDeleteFile, useFiles, useUploadFile } from "@/hooks/use-data";
 import { cn } from "@/lib/utils";
 import { FilePreviewDialog, downloadFile, registerFileBlob } from "@/components/files/file-preview-dialog";
+import { useWorkspaceIntegrations } from "@/lib/integrations/use-integrations";
 import type { FileRecord } from "@/lib/types";
 
 export const Route = createFileRoute("/files")({
@@ -30,6 +31,8 @@ export const Route = createFileRoute("/files")({
 
 function FilesPage() {
   const { data: files = [], isLoading } = useFiles();
+  const { integrations } = useWorkspaceIntegrations();
+  const storageState = integrations.storage;
   const [folder, setFolder] = useState<string | null>(null);
   const [view, setView] = useState<"grid" | "list">("grid");
   const [query, setQuery] = useState("");
@@ -69,7 +72,16 @@ function FilesPage() {
           title="File manager"
           description="Documents, designs and deliverables attached to projects and clients."
           actions={
-            <>
+            <div className="flex items-center gap-2">
+              {storageState?.connected ? (
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 py-1 px-3 bg-cyan-500/10 text-cyan-400 border-cyan-500/30 text-xs font-medium"
+                >
+                  <span className="size-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                  <span>Storage: {storageState.config.provider?.toUpperCase() || "AWS S3"} ({storageState.config.bucket_name || "teamlio-vault"})</span>
+                </Badge>
+              ) : null}
               <input
                 ref={inputRef}
                 type="file"
@@ -80,7 +92,7 @@ function FilesPage() {
               <Button size="sm" disabled={upload.isPending} onClick={() => inputRef.current?.click()}>
                 <Upload className="size-4" /> {upload.isPending ? "Uploading…" : "Upload"}
               </Button>
-            </>
+            </div>
           }
         />
 

@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { addMonths, eachDayOfInterval, endOfMonth, format, isSameDay, isSameMonth, parseISO, startOfMonth, startOfWeek, endOfWeek } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLeaveRequests, useMeetings, useTasks } from "@/hooks/use-data";
 import { userName } from "@/components/shared/user-avatar";
+import { useWorkspaceIntegrations } from "@/lib/integrations/use-integrations";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/calendar")({
@@ -25,6 +27,8 @@ export const Route = createFileRoute("/calendar")({
 type Layer = "tasks" | "meetings" | "leave";
 
 function CalendarPage() {
+  const { integrations } = useWorkspaceIntegrations();
+  const calState = integrations.calendar;
   const [cursor, setCursor] = useState(new Date());
   const [layers, setLayers] = useState<Layer[]>(["tasks", "meetings", "leave"]);
   const { data: tasks = [] } = useTasks();
@@ -67,6 +71,15 @@ function CalendarPage() {
           description="Task due dates, meetings and approved leave in a single view."
           actions={
             <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+              {calState?.connected ? (
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 py-1 px-2.5 bg-rose-500/10 text-rose-400 border-rose-500/30 text-xs font-medium"
+                >
+                  <span className="size-1.5 rounded-full bg-rose-400 animate-pulse" />
+                  <span>{calState.config.provider === "google" ? "Google Calendar" : "Outlook"} Synced</span>
+                </Badge>
+              ) : null}
               {(["tasks", "meetings", "leave"] as Layer[]).map((l) => (
                 <label key={l} className="flex items-center gap-1.5 text-sm capitalize">
                   <Checkbox checked={layers.includes(l)} onCheckedChange={() => toggle(l)} /> {l}

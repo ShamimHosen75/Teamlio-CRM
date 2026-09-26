@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Plug, Send } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
 import { PermissionGuard } from "@/components/shared/permission-guard";
@@ -10,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { fmtDateTime, fromNow } from "@/lib/format";
 import { useConversationMessages, useConversations } from "@/hooks/use-data";
+import { useWorkspaceIntegrations } from "@/lib/integrations/use-integrations";
 import { cn } from "@/lib/utils";
 
 export function ConversationWorkspace({
@@ -22,6 +24,10 @@ export function ConversationWorkspace({
   channels: string[];
 }) {
   const { data: all = [], isLoading } = useConversations();
+  const { integrations } = useWorkspaceIntegrations();
+  const waState = integrations.whatsapp;
+  const isWaConnected = waState?.connected ?? false;
+
   const conversations = all.filter((c) => channels.includes(c.channel));
   const [selected, setSelected] = useState<string | null>(null);
   const activeId = selected ?? conversations[0]?.id ?? "";
@@ -35,7 +41,33 @@ export function ConversationWorkspace({
   return (
     <PermissionGuard permission="marketing.read" mode="page">
       <div className="mx-auto max-w-[1600px]">
-        <PageHeader title={title} description={description} />
+        <PageHeader
+          title={title}
+          description={description}
+          actions={
+            channels.includes("WhatsApp") ? (
+              isWaConnected ? (
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 py-1 px-3 bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-xs font-medium"
+                >
+                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>WhatsApp Cloud API Active: {waState.config.phone_number || "+1 (555) 019-2834"}</span>
+                </Badge>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">API Disconnected</Badge>
+                  <Link to="/admin/integrations">
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs text-primary border-primary/30">
+                      <Plug className="size-3.5" />
+                      <span>Connect WhatsApp</span>
+                    </Button>
+                  </Link>
+                </div>
+              )
+            ) : null
+          }
+        />
         {conversations.length === 0 ? (
           <EmptyState title="No conversations yet" description="Inbound messages will appear here." />
         ) : (

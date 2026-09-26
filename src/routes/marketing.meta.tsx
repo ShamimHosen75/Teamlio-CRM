@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { MetricChart } from "@/components/shared/metric-chart";
@@ -7,6 +7,12 @@ import { PermissionGuard } from "@/components/shared/permission-guard";
 import { Badge } from "@/components/ui/badge";
 import { compactNumber, money } from "@/lib/format";
 import { useCampaigns } from "@/hooks/use-data";
+
+import { Link } from "@tanstack/react-router";
+import { Plug, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useWorkspaceIntegrations } from "@/lib/integrations/use-integrations";
+import { fromNow } from "@/lib/format";
 
 export const Route = createFileRoute("/marketing/meta")({
   head: () => ({
@@ -22,6 +28,10 @@ export const Route = createFileRoute("/marketing/meta")({
 
 function MetaAdsPage() {
   const { data: campaigns = [], isLoading } = useCampaigns();
+  const { integrations, syncIntegration } = useWorkspaceIntegrations();
+  const metaState = integrations.meta;
+  const isConnected = metaState?.connected ?? false;
+
   const spend = campaigns.reduce((s, c) => s + c.spend, 0);
   const clicks = campaigns.reduce((s, c) => s + c.clicks, 0);
   const leads = campaigns.reduce((s, c) => s + c.leads, 0);
@@ -35,7 +45,41 @@ function MetaAdsPage() {
         <PageHeader
           title="Meta Ads"
           description="Performance pulled through the ads connector."
-          actions={<Badge variant="secondary">Demo data — no ad account connected</Badge>}
+          actions={
+            isConnected ? (
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 py-1 px-3 bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-xs font-medium"
+                >
+                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>
+                    Meta Connected: {metaState.config.ad_account_id || "act_active"}
+                    {metaState.last_sync_at ? ` · Synced ${fromNow(metaState.last_sync_at)}` : ""}
+                  </span>
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => syncIntegration("meta")}
+                  className="gap-1.5 text-xs"
+                >
+                  <RefreshCw className="size-3" />
+                  <span>Sync Leads & Ads</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Demo data — no ad account connected</Badge>
+                <Link to="/admin/integrations">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs text-primary border-primary/30">
+                    <Plug className="size-3.5" />
+                    <span>Connect Meta Business</span>
+                  </Button>
+                </Link>
+              </div>
+            )
+          }
         />
         <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Spend" value={money(spend)} loading={isLoading} />

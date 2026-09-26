@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Mail, Plus, Receipt, Trash2 } from "lucide-react";
+import { CreditCard, Mail, Plus, Receipt, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState, SkeletonTable } from "@/components/shared/states";
@@ -16,6 +16,7 @@ import { prettyStatus } from "@/components/cloud/work-ui";
 import { fmtDate, money } from "@/lib/format";
 import { useOrgProjects, type CloudProject } from "@/hooks/use-cloud";
 import { useOrgClients, type CloudClient } from "@/hooks/use-crm-cloud";
+import { useWorkspaceIntegrations } from "@/lib/integrations/use-integrations";
 import {
   INVOICE_STATUSES,
   invoicePaid,
@@ -49,6 +50,8 @@ export const Route = createFileRoute("/_authenticated/business/invoices")({
 
 function InvoicesPage() {
   const { activeOrgId, canManage } = useLiveOrgContext();
+  const { integrations } = useWorkspaceIntegrations();
+  const stripeState = integrations.stripe;
   const { data: invoices = [], isLoading } = useOrgInvoices(activeOrgId);
   const { data: items = [] } = useOrgInvoiceItems(activeOrgId);
   const { data: payments = [] } = useOrgPayments(activeOrgId);
@@ -67,14 +70,25 @@ function InvoicesPage() {
       title="Invoices"
       description="Invoices you generate here are stored live and update as payments arrive."
       actions={
-        canManage ? (
-          <NewInvoiceDrawer
-            organizationId={activeOrgId}
-            clients={clients}
-            projects={projects}
-            suggestedNumber={nextInvoiceNumber(invoices)}
-          />
-        ) : null
+        <div className="flex items-center gap-2">
+          {stripeState?.connected ? (
+            <Badge
+              variant="outline"
+              className="gap-1.5 py-1 px-2.5 bg-violet-500/10 text-violet-400 border-violet-500/30 text-xs font-medium"
+            >
+              <CreditCard className="size-3.5" />
+              <span>Payments: {stripeState.config.provider?.toUpperCase()} ({stripeState.config.mode === "live" ? "Live" : "Test"})</span>
+            </Badge>
+          ) : null}
+          {canManage ? (
+            <NewInvoiceDrawer
+              organizationId={activeOrgId}
+              clients={clients}
+              projects={projects}
+              suggestedNumber={nextInvoiceNumber(invoices)}
+            />
+          ) : null}
+        </div>
       }
     >
       <div className="space-y-5">
