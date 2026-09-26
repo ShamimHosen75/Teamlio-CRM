@@ -30,6 +30,7 @@ import {
   MessagesSquare,
   Milestone,
   Plug,
+  Plus,
   Receipt,
   ScrollText,
   Send,
@@ -48,11 +49,25 @@ import {
   UserRound,
 } from "lucide-react";
 
+export interface NavSubItem {
+  label: string;
+  to?: string;
+  icon?: LucideIcon;
+  permission?: Permission;
+  actionId?: string;
+}
+
 export interface NavItem {
   label: string;
   to: string;
   icon: LucideIcon;
   permission?: Permission;
+  children?: NavSubItem[];
+  quickAction?: {
+    label: string;
+    actionId: string;
+    icon?: LucideIcon;
+  };
 }
 
 export interface NavSection {
@@ -89,7 +104,21 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Leads", to: "/crm/leads", icon: Target, permission: "lead.read" },
       { label: "Clients", to: "/crm/clients", icon: Building2, permission: "client.read" },
       { label: "Contacts", to: "/crm/contacts", icon: Contact, permission: "client.read" },
-      { label: "Companies", to: "/crm/companies", icon: Layers, permission: "client.read" },
+      {
+        label: "Companies",
+        to: "/crm/companies",
+        icon: Layers,
+        permission: "client.read",
+        quickAction: {
+          label: "Add Company",
+          actionId: "new-company",
+          icon: Plus,
+        },
+        children: [
+          { label: "All Companies", to: "/crm/companies", icon: Layers },
+          { label: "Add Company", actionId: "new-company", icon: Plus, permission: "client.read" },
+        ],
+      },
       { label: "Deals", to: "/crm/deals", icon: Handshake, permission: "deal.read" },
       { label: "Pipeline", to: "/crm/pipeline", icon: SquareKanban, permission: "deal.read" },
     ],

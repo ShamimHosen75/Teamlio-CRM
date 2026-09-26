@@ -353,14 +353,14 @@ const crmService: AppServices["crm"] = {
     const row = {
       organization_id: org,
       company: (input as any).company ?? input.name ?? "",
-      contact_name: input.name ?? "",
+      contact_name: (input as any).contact_name ?? input.name ?? "",
       email: input.email ?? "",
       phone: input.phone ?? "",
       website: input.website ?? "",
       industry: input.industry ?? "General",
       status: (input.status ?? "active").toLowerCase(),
-      notes: "",
-      owner_id: input.owner_user_id || null,
+      notes: (input as any).notes ?? input.notes ?? "",
+      owner_id: input.owner_user_id || (input as any).owner_id || null,
     };
     const { data, error } = await supabase
       .from("crm_clients")

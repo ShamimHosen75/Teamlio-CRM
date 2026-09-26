@@ -19,6 +19,7 @@ const OPTIONS: { label: string; to: string; permission?: Permission; search?: Re
   { label: "Task", to: "/tasks", permission: "task.create" },
   { label: "Lead", to: "/crm/leads", permission: "lead.create" },
   { label: "Client", to: "/crm/clients", permission: "client.read" },
+  { label: "Company", to: "/crm/companies", search: { create: "true" }, permission: "client.read" },
   { label: "Deal", to: "/crm/deals", permission: "deal.read" },
   { label: "Meeting", to: "/meetings", permission: "meeting.manage" },
   { label: "Daily Update", to: "/daily-updates", permission: "daily_update.read" },
