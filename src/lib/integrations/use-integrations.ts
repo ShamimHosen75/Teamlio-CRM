@@ -31,6 +31,10 @@ export const DEFAULT_INTEGRATIONS_STATE: WorkspaceIntegrationsState = {
       sync_campaigns: true,
       sync_frequency: "Every 15 minutes",
       account_name: "",
+      facebook_pages: [],
+      instagram_accounts: [],
+      ad_accounts: [],
+      lead_forms: [],
     },
   },
   whatsapp: {
@@ -117,6 +121,27 @@ export const SANDBOX_PRESETS: WorkspaceIntegrationsState = {
       sync_campaigns: true,
       sync_frequency: "Every 15 minutes",
       account_name: "Teamlio Growth Campaigns",
+      selected_page_name: "Teamlio Global Media",
+      selected_instagram_username: "@teamlio_official",
+      selected_ad_account_id: "act_4928192847",
+      active_lead_forms_count: 2,
+      facebook_pages: [
+        { id: "109283746592019", name: "Teamlio Global Media", category: "Software Agency", likes: 14200, is_selected: true },
+        { id: "201928374619283", name: "Teamlio Careers & Brand", category: "Company", likes: 3840, is_selected: false },
+      ],
+      instagram_accounts: [
+        { id: "ig_981726354", username: "@teamlio_official", name: "Teamlio Software", followers: 28400, is_selected: true },
+        { id: "ig_102938475", username: "@teamlio_community", name: "Teamlio Creators", followers: 6100, is_selected: false },
+      ],
+      ad_accounts: [
+        { id: "act_4928192847", name: "Teamlio Performance Ads (USD)", currency: "USD", account_status: 1, is_selected: true },
+        { id: "act_1029384756", name: "Teamlio Brand Awareness", currency: "USD", account_status: 1, is_selected: false },
+      ],
+      lead_forms: [
+        { id: "form_109283", name: "Q3 Website Contact & Consultation Form", leads_count: 48, created_time: "2026-08-10", is_sync_enabled: true, destination: "crm_leads" },
+        { id: "form_291029", name: "VIP Enterprise Demo Request Form", leads_count: 23, created_time: "2026-09-01", is_sync_enabled: true, destination: "crm_leads" },
+        { id: "form_384729", name: "Newsletter & Webinar Registration", leads_count: 112, created_time: "2026-07-25", is_sync_enabled: false, destination: "crm_leads" },
+      ],
     },
   },
   whatsapp: {

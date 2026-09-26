@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
@@ -30,6 +30,7 @@ import {
   testConnectionForService,
   useWorkspaceIntegrations,
 } from "@/lib/integrations/use-integrations";
+import { MetaIntegrationView } from "./meta-integration-modal";
 import type { ConnectionTestResult, IntegrationKey } from "@/lib/integrations/types";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ interface IntegrationWizardDialogProps {
   integrationKey: IntegrationKey | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialMetaTab?: "pages" | "instagram" | "ads" | "forms";
 }
 
 const INTEGRATION_METADATA: Record<
@@ -53,7 +55,7 @@ const INTEGRATION_METADATA: Record<
   meta: {
     name: "Meta Business",
     category: "Marketing",
-    description: "Connect Facebook & Instagram Pages, Meta Ads Account, and Lead Ad Forms.",
+    description: "Connect Facebook Pages, Instagram Accounts, Meta Ads, and Lead Generation Forms.",
     docsUrl: "https://developers.facebook.com/apps/",
     portalName: "Meta for Developers",
   },
@@ -98,32 +100,36 @@ export function IntegrationWizardDialog({
   integrationKey,
   open,
   onOpenChange,
+  initialMetaTab = "pages",
 }: IntegrationWizardDialogProps) {
   const { integrations, connectIntegration } = useWorkspaceIntegrations();
   const [step, setStep] = useState<number>(1);
+  const [metaTab, setMetaTab] = useState<"pages" | "instagram" | "ads" | "forms">(initialMetaTab);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
 
-  // Active integration state
-  const existingState = integrationKey ? integrations[integrationKey] : null;
-  // Local editable draft state
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [draftConfig, setDraftConfig] = useState<any>(() => {
-    if (!integrationKey) return {};
-    return existingState?.config ? { ...existingState.config } : {};
-  });
+  const [draftConfig, setDraftConfig] = useState<any>({});
+
+  // Sync draftConfig when opening
+  useEffect(() => {
+    if (open && integrationKey) {
+      setStep(1);
+      setMetaTab(initialMetaTab || "pages");
+      setTestResult(null);
+      const existing = integrations[integrationKey];
+      if (existing?.config && Object.keys(existing.config).length > 0 && existing.connected) {
+        setDraftConfig({ ...existing.config });
+      } else {
+        const preset = SANDBOX_PRESETS[integrationKey];
+        setDraftConfig(preset?.config ? { ...preset.config } : {});
+      }
+    }
+  }, [open, integrationKey, initialMetaTab]);
 
   if (!integrationKey) return null;
   const meta = INTEGRATION_METADATA[integrationKey];
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (nextOpen && integrationKey) {
-      setStep(1);
-      setTestResult(null);
-      setDraftConfig(integrations[integrationKey]?.config ? { ...integrations[integrationKey].config } : {});
-    }
-    onOpenChange(nextOpen);
-  };
+  const isMeta = integrationKey === "meta";
 
   const handleFillSandbox = () => {
     const sandbox = SANDBOX_PRESETS[integrationKey];
@@ -160,8 +166,20 @@ export function IntegrationWizardDialog({
     setStep(4);
   };
 
+  // Step mapping for Meta
+  const metaStepNum =
+    step === 4
+      ? 4
+      : metaTab === "pages"
+      ? 1
+      : metaTab === "instagram"
+      ? 2
+      : metaTab === "ads"
+      ? 3
+      : 4;
+
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl overflow-hidden p-0 sm:rounded-xl">
         {/* Header */}
         <div className="border-b bg-card/60 px-6 py-5">
@@ -171,7 +189,9 @@ export function IntegrationWizardDialog({
                 <Badge variant="outline" className="text-xs uppercase tracking-wider text-muted-foreground">
                   {meta.category}
                 </Badge>
-                <span className="text-xs text-muted-foreground">• Step {step} of 4</span>
+                <span className="text-xs text-muted-foreground">
+                  • {isMeta ? `Option ${metaStepNum} of 4` : `Step ${step} of 4`}
+                </span>
               </div>
               <DialogTitle className="mt-1 text-xl font-bold tracking-tight">
                 Connect {meta.name}
@@ -195,35 +215,79 @@ export function IntegrationWizardDialog({
 
           {/* Stepper progress */}
           <div className="mt-4 grid grid-cols-4 gap-2">
-            {[
-              { num: 1, label: "Credentials" },
-              { num: 2, label: "Settings" },
-              { num: 3, label: "Test Connection" },
-              { num: 4, label: "Complete" },
-            ].map((s) => (
-              <div key={s.num} className="flex flex-col gap-1">
-                <div
-                  className={cn(
-                    "h-1.5 w-full rounded-full transition-all duration-300",
-                    step >= s.num ? "bg-primary" : "bg-muted",
-                  )}
-                />
-                <span
-                  className={cn(
-                    "text-[11px] font-medium transition-colors",
-                    step === s.num ? "text-foreground font-semibold" : "text-muted-foreground",
-                  )}
-                >
-                  {s.label}
-                </span>
-              </div>
-            ))}
+            {isMeta
+              ? [
+                  { num: 1, label: "Facebook Page", tab: "pages" as const },
+                  { num: 2, label: "Instagram Page", tab: "instagram" as const },
+                  { num: 3, label: "Meta Ads", tab: "ads" as const },
+                  { num: 4, label: "Lead Forms", tab: "forms" as const },
+                ].map((s) => (
+                  <button
+                    key={s.num}
+                    type="button"
+                    onClick={() => {
+                      if (step !== 4) setMetaTab(s.tab);
+                    }}
+                    className="flex flex-col gap-1 text-left"
+                  >
+                    <div
+                      className={cn(
+                        "h-1.5 w-full rounded-full transition-all duration-300",
+                        metaStepNum >= s.num ? "bg-primary" : "bg-muted",
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "text-[11px] font-medium transition-colors truncate",
+                        metaTab === s.tab && step !== 4
+                          ? "text-primary font-semibold"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {s.label}
+                    </span>
+                  </button>
+                ))
+              : [
+                  { num: 1, label: "Credentials" },
+                  { num: 2, label: "Settings" },
+                  { num: 3, label: "Test Connection" },
+                  { num: 4, label: "Complete" },
+                ].map((s) => (
+                  <div key={s.num} className="flex flex-col gap-1">
+                    <div
+                      className={cn(
+                        "h-1.5 w-full rounded-full transition-all duration-300",
+                        step >= s.num ? "bg-primary" : "bg-muted",
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "text-[11px] font-medium transition-colors",
+                        step === s.num ? "text-foreground font-semibold" : "text-muted-foreground",
+                      )}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
+                ))}
           </div>
         </div>
 
-        {/* Content area based on current step */}
-        <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
-          {step === 1 && (
+        {/* Content area */}
+        <div className="max-h-[62vh] overflow-y-auto px-6 py-5">
+          {/* META DEDICATED VIEW */}
+          {isMeta && step !== 4 && (
+            <MetaIntegrationView
+              config={draftConfig}
+              onChange={setDraftConfig}
+              activeTab={metaTab}
+              onTabChange={setMetaTab}
+            />
+          )}
+
+          {/* NON-META SERVICES: STEP 1 */}
+          {!isMeta && step === 1 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-xs">
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -240,49 +304,6 @@ export function IntegrationWizardDialog({
                   <ExternalLink className="size-3" />
                 </a>
               </div>
-
-              {/* Service-specific Step 1 fields */}
-              {integrationKey === "meta" && (
-                <div className="grid gap-3.5">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="meta_app_id" className="text-xs font-medium">
-                      Meta App ID <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="meta_app_id"
-                      placeholder="e.g. 492817294829103"
-                      value={draftConfig.app_id || ""}
-                      onChange={(e) => setDraftConfig({ ...draftConfig, app_id: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="meta_app_secret" className="text-xs font-medium">
-                      Meta App Secret <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="meta_app_secret"
-                      type="password"
-                      placeholder="App secret from developer console"
-                      value={draftConfig.app_secret || ""}
-                      onChange={(e) => setDraftConfig({ ...draftConfig, app_secret: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="meta_ad_account" className="text-xs font-medium">
-                      Ad Account ID <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="meta_ad_account"
-                      placeholder="e.g. act_4928192847"
-                      value={draftConfig.ad_account_id || ""}
-                      onChange={(e) => setDraftConfig({ ...draftConfig, ad_account_id: e.target.value })}
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Format: act_ followed by your numerical ad account ID.
-                    </p>
-                  </div>
-                </div>
-              )}
 
               {integrationKey === "whatsapp" && (
                 <div className="grid gap-3.5">
@@ -342,13 +363,13 @@ export function IntegrationWizardDialog({
                     </Label>
                     <select
                       id="stripe_provider"
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                       value={draftConfig.provider || "stripe"}
                       onChange={(e) => setDraftConfig({ ...draftConfig, provider: e.target.value })}
                     >
-                      <option value="stripe">Stripe (Cards, Apple Pay, Google Pay)</option>
-                      <option value="razorpay">Razorpay (UPI, Netbanking, Cards)</option>
-                      <option value="paypal">PayPal Commerce Platform</option>
+                      <option value="stripe">Stripe (Credit Cards, Apple Pay, Google Pay)</option>
+                      <option value="razorpay">Razorpay (Cards, UPI, Netbanking)</option>
+                      <option value="paypal">PayPal Commerce</option>
                     </select>
                   </div>
                   <div className="grid gap-1.5">
@@ -374,31 +395,6 @@ export function IntegrationWizardDialog({
                       onChange={(e) => setDraftConfig({ ...draftConfig, secret_key: e.target.value })}
                     />
                   </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="stripe_mode" className="text-xs font-medium">
-                      Environment Mode
-                    </Label>
-                    <div className="flex gap-4 pt-1">
-                      <label className="flex items-center gap-2 text-xs cursor-pointer">
-                        <input
-                          type="radio"
-                          name="stripe_mode"
-                          checked={draftConfig.mode !== "live"}
-                          onChange={() => setDraftConfig({ ...draftConfig, mode: "test" })}
-                        />
-                        <span>Sandbox / Test Mode</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-xs cursor-pointer">
-                        <input
-                          type="radio"
-                          name="stripe_mode"
-                          checked={draftConfig.mode === "live"}
-                          onChange={() => setDraftConfig({ ...draftConfig, mode: "live" })}
-                        />
-                        <span className="font-semibold text-emerald-500">Live Production</span>
-                      </label>
-                    </div>
-                  </div>
                 </div>
               )}
 
@@ -410,7 +406,7 @@ export function IntegrationWizardDialog({
                     </Label>
                     <select
                       id="email_provider"
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                       value={draftConfig.provider || "resend"}
                       onChange={(e) => setDraftConfig({ ...draftConfig, provider: e.target.value })}
                     >
@@ -420,61 +416,18 @@ export function IntegrationWizardDialog({
                       <option value="smtp">Custom SMTP Server</option>
                     </select>
                   </div>
-                  {draftConfig.provider === "smtp" ? (
-                    <>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="grid gap-1.5">
-                          <Label className="text-xs font-medium">SMTP Host</Label>
-                          <Input
-                            placeholder="smtp.mailgun.org"
-                            value={draftConfig.smtp_host || ""}
-                            onChange={(e) => setDraftConfig({ ...draftConfig, smtp_host: e.target.value })}
-                          />
-                        </div>
-                        <div className="grid gap-1.5">
-                          <Label className="text-xs font-medium">Port</Label>
-                          <Input
-                            placeholder="587"
-                            type="number"
-                            value={draftConfig.smtp_port || 587}
-                            onChange={(e) => setDraftConfig({ ...draftConfig, smtp_port: Number(e.target.value) })}
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="grid gap-1.5">
-                          <Label className="text-xs font-medium">Username</Label>
-                          <Input
-                            placeholder="postmaster@yourdomain.com"
-                            value={draftConfig.smtp_user || ""}
-                            onChange={(e) => setDraftConfig({ ...draftConfig, smtp_user: e.target.value })}
-                          />
-                        </div>
-                        <div className="grid gap-1.5">
-                          <Label className="text-xs font-medium">Password</Label>
-                          <Input
-                            type="password"
-                            placeholder="SMTP Password"
-                            value={draftConfig.smtp_pass || ""}
-                            onChange={(e) => setDraftConfig({ ...draftConfig, smtp_pass: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="email_api_key" className="text-xs font-medium">
-                        API Key <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="email_api_key"
-                        type="password"
-                        placeholder="re_... or SG...."
-                        value={draftConfig.api_key || ""}
-                        onChange={(e) => setDraftConfig({ ...draftConfig, api_key: e.target.value })}
-                      />
-                    </div>
-                  )}
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="email_api_key" className="text-xs font-medium">
+                      API Key <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="email_api_key"
+                      type="password"
+                      placeholder="re_... or SG...."
+                      value={draftConfig.api_key || ""}
+                      onChange={(e) => setDraftConfig({ ...draftConfig, api_key: e.target.value })}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -486,7 +439,7 @@ export function IntegrationWizardDialog({
                     </Label>
                     <select
                       id="storage_provider"
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                       value={draftConfig.provider || "s3"}
                       onChange={(e) => setDraftConfig({ ...draftConfig, provider: e.target.value })}
                     >
@@ -520,29 +473,6 @@ export function IntegrationWizardDialog({
                       />
                     </div>
                   </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="storage_key" className="text-xs font-medium">
-                      Access Key ID <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="storage_key"
-                      placeholder="AKIA..."
-                      value={draftConfig.access_key_id || ""}
-                      onChange={(e) => setDraftConfig({ ...draftConfig, access_key_id: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="storage_sec" className="text-xs font-medium">
-                      Secret Access Key <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="storage_sec"
-                      type="password"
-                      placeholder="Secret access key"
-                      value={draftConfig.secret_access_key || ""}
-                      onChange={(e) => setDraftConfig({ ...draftConfig, secret_access_key: e.target.value })}
-                    />
-                  </div>
                 </div>
               )}
 
@@ -554,7 +484,7 @@ export function IntegrationWizardDialog({
                     </Label>
                     <select
                       id="cal_provider"
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                       value={draftConfig.provider || "google"}
                       onChange={(e) => setDraftConfig({ ...draftConfig, provider: e.target.value })}
                     >
@@ -575,64 +505,17 @@ export function IntegrationWizardDialog({
                       onChange={(e) => setDraftConfig({ ...draftConfig, account_email: e.target.value })}
                     />
                   </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="cal_client_id" className="text-xs font-medium">
-                      OAuth Client ID / Application ID
-                    </Label>
-                    <Input
-                      id="cal_client_id"
-                      placeholder="e.g. 849201938472-apps.googleusercontent.com"
-                      value={draftConfig.client_id || ""}
-                      onChange={(e) => setDraftConfig({ ...draftConfig, client_id: e.target.value })}
-                    />
-                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {step === 2 && (
+          {/* NON-META SERVICES: STEP 2 */}
+          {!isMeta && step === 2 && (
             <div className="space-y-4">
               <div className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">
                 Configure synchronization rules, notification behaviors, and defaults for this service.
               </div>
-
-              {integrationKey === "meta" && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <Label className="text-xs font-medium">Sync Meta Leads into CRM</Label>
-                      <p className="text-[11px] text-muted-foreground">
-                        Automatically create leads in CRM Leads when instant forms are submitted.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={draftConfig.sync_leads ?? true}
-                      onCheckedChange={(checked) => setDraftConfig({ ...draftConfig, sync_leads: checked })}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <Label className="text-xs font-medium">Sync Ad Campaigns & Metrics</Label>
-                      <p className="text-[11px] text-muted-foreground">
-                        Keep impressions, clicks, spend, and cost per lead updated in real-time.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={draftConfig.sync_campaigns ?? true}
-                      onCheckedChange={(checked) => setDraftConfig({ ...draftConfig, sync_campaigns: checked })}
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label className="text-xs font-medium">Connected Facebook Page Name</Label>
-                    <Input
-                      placeholder="e.g. Teamlio Global Agency"
-                      value={draftConfig.page_name || ""}
-                      onChange={(e) => setDraftConfig({ ...draftConfig, page_name: e.target.value })}
-                    />
-                  </div>
-                </div>
-              )}
 
               {integrationKey === "whatsapp" && (
                 <div className="space-y-3">
@@ -649,14 +532,6 @@ export function IntegrationWizardDialog({
                     />
                   </div>
                   <div className="grid gap-1.5">
-                    <Label className="text-xs font-medium">Webhook Verify Token</Label>
-                    <Input
-                      placeholder="teamlio_webhook_v1_secure"
-                      value={draftConfig.webhook_verify_token || ""}
-                      onChange={(e) => setDraftConfig({ ...draftConfig, webhook_verify_token: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
                     <Label className="text-xs font-medium">Default Auto-Welcome Reply</Label>
                     <Input
                       placeholder="Hi! Welcome to Teamlio. An account manager will reply soon."
@@ -670,7 +545,7 @@ export function IntegrationWizardDialog({
               {integrationKey === "stripe" && (
                 <div className="space-y-3">
                   <div className="grid gap-1.5">
-                    <Label className="text-xs font-medium">Default Invoicing Currency</Label>
+                    <Label className="text-xs font-medium">Default Currency</Label>
                     <select
                       className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                       value={draftConfig.currency || "USD"}
@@ -680,28 +555,18 @@ export function IntegrationWizardDialog({
                       <option value="EUR">EUR (€ - Euro)</option>
                       <option value="GBP">GBP (£ - British Pound)</option>
                       <option value="BDT">BDT (৳ - Bangladeshi Taka)</option>
-                      <option value="CAD">CAD ($ - Canadian Dollar)</option>
-                      <option value="AUD">AUD ($ - Australian Dollar)</option>
                     </select>
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3">
                     <div className="space-y-0.5">
                       <Label className="text-xs font-medium">Automatic Email Receipts</Label>
                       <p className="text-[11px] text-muted-foreground">
-                        Send automated branded receipt to client immediately upon invoice settlement.
+                        Send branded receipt immediately upon invoice settlement.
                       </p>
                     </div>
                     <Switch
                       checked={draftConfig.auto_receipts ?? true}
                       onCheckedChange={(checked) => setDraftConfig({ ...draftConfig, auto_receipts: checked })}
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label className="text-xs font-medium">Credit Card Statement Descriptor</Label>
-                    <Input
-                      placeholder="TEAMLIO*CRM"
-                      value={draftConfig.statement_descriptor || ""}
-                      onChange={(e) => setDraftConfig({ ...draftConfig, statement_descriptor: e.target.value })}
                     />
                   </div>
                 </div>
@@ -725,29 +590,18 @@ export function IntegrationWizardDialog({
                       onChange={(e) => setDraftConfig({ ...draftConfig, from_email: e.target.value })}
                     />
                   </div>
-                  <div className="grid gap-1.5">
-                    <Label className="text-xs font-medium">Reply-To Email Address</Label>
-                    <Input
-                      placeholder="support@yourdomain.com"
-                      value={draftConfig.reply_to || ""}
-                      onChange={(e) => setDraftConfig({ ...draftConfig, reply_to: e.target.value })}
-                    />
-                  </div>
                 </div>
               )}
 
               {integrationKey === "storage" && (
                 <div className="space-y-3">
                   <div className="grid gap-1.5">
-                    <Label className="text-xs font-medium">Custom CDN Domain (Optional)</Label>
+                    <Label className="text-xs font-medium">Custom CDN Domain</Label>
                     <Input
                       placeholder="https://cdn.youragency.com"
                       value={draftConfig.cdn_domain || ""}
                       onChange={(e) => setDraftConfig({ ...draftConfig, cdn_domain: e.target.value })}
                     />
-                    <p className="text-[11px] text-muted-foreground">
-                      Delivers client assets with lower latency and your custom domain branding.
-                    </p>
                   </div>
                 </div>
               )}
@@ -765,24 +619,13 @@ export function IntegrationWizardDialog({
                       <option value="one_way">Export Only (Teamlio → Calendar)</option>
                     </select>
                   </div>
-                  <div className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <Label className="text-xs font-medium">Auto-Generate Video Conference Links</Label>
-                      <p className="text-[11px] text-muted-foreground">
-                        Automatically attach Google Meet or Microsoft Teams link to every booked meeting.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={draftConfig.auto_video_link ?? true}
-                      onCheckedChange={(checked) => setDraftConfig({ ...draftConfig, auto_video_link: checked })}
-                    />
-                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {step === 3 && (
+          {/* NON-META SERVICES: STEP 3 */}
+          {!isMeta && step === 3 && (
             <div className="space-y-4">
               <div className="rounded-xl border bg-card/40 p-4 text-center">
                 <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -790,7 +633,7 @@ export function IntegrationWizardDialog({
                 </div>
                 <h3 className="mt-3 text-sm font-semibold">Test Connection Handshake</h3>
                 <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
-                  Teamlio will execute a live test handshake to verify that credentials, scopes, and endpoints are operational.
+                  Teamlio will execute a live test handshake to verify credentials and endpoints.
                 </p>
 
                 <div className="mt-4 flex justify-center">
@@ -838,16 +681,6 @@ export function IntegrationWizardDialog({
                         <span className="text-[11px] opacity-75 font-mono">{testResult.latency_ms}ms latency</span>
                       </div>
                       <p className="mt-1 opacity-90">{testResult.message}</p>
-
-                      {testResult.details && (
-                        <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-emerald-500/20 bg-background/50 p-2.5 font-mono text-[11px] text-foreground">
-                          {Object.entries(testResult.details).map(([key, value]) => (
-                            <div key={key}>
-                              <span className="text-muted-foreground">{key}:</span> {value}
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -855,6 +688,7 @@ export function IntegrationWizardDialog({
             </div>
           )}
 
+          {/* ALL SERVICES: STEP 4 (COMPLETE) */}
           {step === 4 && (
             <div className="py-6 text-center space-y-4">
               <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 ring-8 ring-emerald-500/5">
@@ -867,6 +701,35 @@ export function IntegrationWizardDialog({
                 </p>
               </div>
 
+              {isMeta && (
+                <div className="mx-auto max-w-md rounded-lg border bg-muted/20 p-3 text-xs text-left space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Facebook Page:</span>
+                    <span className="font-semibold text-foreground">
+                      {draftConfig.selected_page_name || "Teamlio Global Agency"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Instagram Account:</span>
+                    <span className="font-semibold text-foreground">
+                      {draftConfig.selected_instagram_username || "@teamlio_official"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Meta Ads Account:</span>
+                    <span className="font-semibold font-mono text-foreground">
+                      {draftConfig.selected_ad_account_id || "act_4928192847"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Lead Gen Forms:</span>
+                    <span className="font-semibold text-emerald-400">
+                      {draftConfig.active_lead_forms_count || 2} Forms Syncing to CRM Leads
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-center gap-3 pt-2">
                 <Button variant="default" size="sm" onClick={() => onOpenChange(false)}>
                   Done
@@ -878,40 +741,102 @@ export function IntegrationWizardDialog({
 
         {/* Footer actions */}
         <div className="flex items-center justify-between border-t bg-muted/20 px-6 py-4">
-          {step > 1 && step < 4 ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setStep((s) => s - 1)}
-              className="gap-1.5 text-xs"
-            >
-              <ArrowLeft className="size-3.5" />
-              <span>Back</span>
-            </Button>
+          {isMeta && step !== 4 ? (
+            <>
+              {metaTab !== "pages" ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (metaTab === "forms") setMetaTab("ads");
+                    else if (metaTab === "ads") setMetaTab("instagram");
+                    else if (metaTab === "instagram") setMetaTab("pages");
+                  }}
+                  className="gap-1.5 text-xs"
+                >
+                  <ArrowLeft className="size-3.5" />
+                  <span>
+                    Back to{" "}
+                    {metaTab === "forms"
+                      ? "Meta Ads"
+                      : metaTab === "ads"
+                      ? "Instagram"
+                      : "Facebook Page"}
+                  </span>
+                </Button>
+              ) : (
+                <div />
+              )}
+
+              {metaTab !== "forms" ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (metaTab === "pages") setMetaTab("instagram");
+                    else if (metaTab === "instagram") setMetaTab("ads");
+                    else if (metaTab === "ads") setMetaTab("forms");
+                  }}
+                  className="gap-1.5 text-xs ml-auto"
+                >
+                  <span>
+                    Next:{" "}
+                    {metaTab === "pages"
+                      ? "Instagram Page"
+                      : metaTab === "instagram"
+                      ? "Meta Ads"
+                      : "Lead Forms"}
+                  </span>
+                  <ArrowRight className="size-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={handleSaveAndActivate}
+                  className="gap-1.5 text-xs ml-auto bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  <CheckCircle2 className="size-3.5" />
+                  <span>Save & Connect Meta Business</span>
+                </Button>
+              )}
+            </>
           ) : (
-            <div />
-          )}
+            <>
+              {step > 1 && step < 4 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setStep((s) => s - 1)}
+                  className="gap-1.5 text-xs"
+                >
+                  <ArrowLeft className="size-3.5" />
+                  <span>Back</span>
+                </Button>
+              ) : (
+                <div />
+              )}
 
-          {step < 3 && (
-            <Button
-              size="sm"
-              onClick={() => setStep((s) => s + 1)}
-              className="gap-1.5 text-xs ml-auto"
-            >
-              <span>Next Step</span>
-              <ArrowRight className="size-3.5" />
-            </Button>
-          )}
+              {step < 3 && (
+                <Button
+                  size="sm"
+                  onClick={() => setStep((s) => s + 1)}
+                  className="gap-1.5 text-xs ml-auto"
+                >
+                  <span>Next Step</span>
+                  <ArrowRight className="size-3.5" />
+                </Button>
+              )}
 
-          {step === 3 && (
-            <Button
-              size="sm"
-              onClick={handleSaveAndActivate}
-              className="gap-1.5 text-xs ml-auto bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              <CheckCircle2 className="size-3.5" />
-              <span>Save & Connect Service</span>
-            </Button>
+              {step === 3 && (
+                <Button
+                  size="sm"
+                  onClick={handleSaveAndActivate}
+                  className="gap-1.5 text-xs ml-auto bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  <CheckCircle2 className="size-3.5" />
+                  <span>Save & Connect Service</span>
+                </Button>
+              )}
+            </>
           )}
         </div>
       </DialogContent>

@@ -126,6 +126,7 @@ function IntegrationsPage() {
   } = useWorkspaceIntegrations();
 
   const [activeModalKey, setActiveModalKey] = useState<IntegrationKey | null>(null);
+  const [initialMetaTab, setInitialMetaTab] = useState<"pages" | "instagram" | "ads" | "forms">("pages");
   const [syncingKey, setSyncingKey] = useState<string | null>(null);
 
   const connectedCount = Object.values(integrations).filter((i) => i.connected).length;
@@ -242,25 +243,80 @@ function IntegrationsPage() {
                     {item.description}
                   </p>
 
+                  {/* Meta Specific Channels & Assets Options */}
+                  {item.key === "meta" && (
+                    <div className="mt-4 space-y-2 border-t pt-3">
+                      <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <span>Connected Options & Assets:</span>
+                        <span className="text-[10px] text-primary lowercase">click to configure</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInitialMetaTab("pages");
+                            setActiveModalKey("meta");
+                          }}
+                          className="flex items-center justify-between rounded-lg border bg-muted/40 p-2 text-left hover:bg-accent/60 transition-colors"
+                          title="Configure Facebook Business Page"
+                        >
+                          <span className="truncate">📘 FB Page</span>
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 text-blue-400 border-blue-500/30">
+                            {config.selected_page_name ? "Linked" : "Select"}
+                          </Badge>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInitialMetaTab("instagram");
+                            setActiveModalKey("meta");
+                          }}
+                          className="flex items-center justify-between rounded-lg border bg-muted/40 p-2 text-left hover:bg-accent/60 transition-colors"
+                          title="Configure Instagram Business Profile"
+                        >
+                          <span className="truncate">📷 Instagram</span>
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 text-pink-400 border-pink-500/30">
+                            {config.selected_instagram_username ? "Linked" : "Select"}
+                          </Badge>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInitialMetaTab("ads");
+                            setActiveModalKey("meta");
+                          }}
+                          className="flex items-center justify-between rounded-lg border bg-muted/40 p-2 text-left hover:bg-accent/60 transition-colors"
+                          title="Configure Meta Ads Account"
+                        >
+                          <span className="truncate">📊 Meta Ads</span>
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 text-violet-400 border-violet-500/30">
+                            {config.selected_ad_account_id ? "Active" : "Select"}
+                          </Badge>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInitialMetaTab("forms");
+                            setActiveModalKey("meta");
+                          }}
+                          className="flex items-center justify-between rounded-lg border bg-muted/40 p-2 text-left hover:bg-accent/60 transition-colors"
+                          title="Configure Instant Lead Generation Forms"
+                        >
+                          <span className="truncate">📋 Lead Forms</span>
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 text-emerald-400 border-emerald-500/30">
+                            {config.active_lead_forms_count ? `${config.active_lead_forms_count} Syncing` : "Sync"}
+                          </Badge>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Connection Details if active */}
-                  {isConnected && (
+                  {isConnected && item.key !== "meta" && (
                     <div className="mt-4 space-y-1.5 rounded-lg border bg-muted/30 p-2.5 text-[11px]">
-                      {item.key === "meta" && (
-                        <>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Ad Account:</span>
-                            <span className="font-mono font-medium">{config.ad_account_id || "act_demo"}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Page:</span>
-                            <span className="truncate max-w-[140px] font-medium">{config.page_name || "Teamlio Page"}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Lead Sync:</span>
-                            <span className="text-emerald-400">Active</span>
-                          </div>
-                        </>
-                      )}
 
                       {item.key === "whatsapp" && (
                         <>
@@ -411,6 +467,7 @@ function IntegrationsPage() {
         <IntegrationWizardDialog
           integrationKey={activeModalKey}
           open={Boolean(activeModalKey)}
+          initialMetaTab={initialMetaTab}
           onOpenChange={(open) => {
             if (!open) setActiveModalKey(null);
           }}
