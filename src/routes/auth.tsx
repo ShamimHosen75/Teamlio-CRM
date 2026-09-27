@@ -282,16 +282,29 @@ function AuthPage() {
                 </p>
 
                 {forgotSent ? (
-                  <div className="mt-5 rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm">
-                    <div className="flex items-start gap-2.5">
-                      <MailCheck className="mt-0.5 size-5 shrink-0 text-primary" />
-                      <div>
-                        <p className="font-medium text-foreground">Reset link dispatched</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Check <strong>{email}</strong> for instructions. Open the link to set a new password.
-                        </p>
+                  <div className="mt-5 space-y-4">
+                    <div className="rounded-lg border border-primary/20 bg-primary-soft/50 p-4 text-sm">
+                      <div className="flex items-start gap-2.5">
+                        <MailCheck className="mt-0.5 size-5 shrink-0 text-primary" />
+                        <div>
+                          <p className="font-semibold text-foreground">Password reset email sent</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            We've dispatched password reset instructions to <strong>{email}</strong>. Open the link to create your new password.
+                          </p>
+                        </div>
                       </div>
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        setMode("signin");
+                        setForgotSent(false);
+                      }}
+                    >
+                      Return to sign in
+                    </Button>
                   </div>
                 ) : (
                   <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
@@ -461,15 +474,16 @@ function AuthPage() {
                     <div className="flex items-center justify-between">
                       <Label htmlFor="password">Password</Label>
                       {mode === "signin" ? (
-                        <Button
+                        <button
                           type="button"
-                          variant="link"
-                          size="sm"
-                          className="h-auto p-0 text-xs font-normal text-muted-foreground hover:text-foreground"
-                          onClick={() => setMode("forgot")}
+                          className="text-xs font-semibold text-primary hover:underline transition-colors focus:outline-none cursor-pointer"
+                          onClick={() => {
+                            setMode("forgot");
+                            setForgotSent(false);
+                          }}
                         >
                           Forgot password?
-                        </Button>
+                        </button>
                       ) : null}
                     </div>
                     <div className="relative">
@@ -535,7 +549,7 @@ function AuthPage() {
                   <Button
                     type="button"
                     variant="link"
-                    className="h-auto p-0 font-medium"
+                    className="h-auto p-0 font-medium text-primary hover:underline"
                     onClick={() => {
                       setMode(mode === "signin" ? "signup" : "signin");
                       setSentConfirmation(false);
@@ -545,6 +559,22 @@ function AuthPage() {
                     {mode === "signin" ? "Create an account" : "Sign in"}
                   </Button>
                 </p>
+
+                {mode === "signin" ? (
+                  <p className="mt-2 text-center text-xs text-muted-foreground">
+                    Forgot your password?{" "}
+                    <button
+                      type="button"
+                      className="font-medium text-primary hover:underline cursor-pointer"
+                      onClick={() => {
+                        setMode("forgot");
+                        setForgotSent(false);
+                      }}
+                    >
+                      Reset it here
+                    </button>
+                  </p>
+                ) : null}
               </>
             )}
           </div>
