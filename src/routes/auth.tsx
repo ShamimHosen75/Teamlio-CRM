@@ -57,6 +57,7 @@ function AuthPage() {
   const [sentConfirmation, setSentConfirmation] = useState(false);
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const [forgotSent, setForgotSent] = useState(false);
+  const [directRecoveryLink, setDirectRecoveryLink] = useState<string | null>(null);
 
   const { user, loading } = useSession();
   const navigate = useNavigate();
@@ -135,14 +136,20 @@ function AuthPage() {
       }
       setBusy(true);
       try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/auth?mode=reset`,
+        const { requestPasswordResetFn } = await import("@/lib/auth.functions");
+        const res = await requestPasswordResetFn({
+          data: {
+            email: email.trim(),
+            redirectTo: `${window.location.origin}/auth?mode=reset`,
+          },
         });
-        if (error) throw error;
         setForgotSent(true);
-        toast.success(`Password reset instructions sent to ${email.trim()}`);
+        if (res.recoveryLink) {
+          setDirectRecoveryLink(res.recoveryLink);
+        }
+        toast.success(`Password reset requested for ${email.trim()}`);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to send reset link");
+        toast.error(err instanceof Error ? err.message : "Failed to process reset request");
       } finally {
         setBusy(false);
       }
@@ -197,8 +204,28 @@ function AuthPage() {
         if (error) throw error;
 
         if (!data.session) {
+          // Attempt automatic server-side email confirmation so the user is never blocked by Gmail deliverability
+          try {
+            const { autoConfirmUserFn } = await import("@/lib/auth.functions");
+            const confirmRes = await autoConfirmUserFn({ data: { email: email.trim() } });
+            if (confirmRes.success) {
+              const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                email: email.trim(),
+                password,
+              });
+              if (!signInError && signInData.session) {
+                toast.success("Account created and activated! Welcome to Teamlio.");
+                const target = search.redirect && search.redirect.startsWith("/") ? search.redirect : "/admin/workspace";
+                navigate({ to: target, replace: true });
+                return;
+              }
+            }
+          } catch (e) {
+            console.warn("Auto-confirm attempt:", e);
+          }
+
           setSentConfirmation(true);
-          toast.success("Account created! Check your email to activate it.");
+          toast.success("Account created! Check your email or spam folder to activate it.");
         } else {
           toast.success("Account created successfully! Welcome to Teamlio.");
           const target = search.redirect && search.redirect.startsWith("/") ? search.redirect : "/admin/workspace";
@@ -212,6 +239,26 @@ function AuthPage() {
         if (error) {
           if (error.message.toLowerCase().includes("email not confirmed")) {
             setUnconfirmedEmail(email.trim());
+            // Attempt auto-confirm on demand so unconfirmed users are instantly unlocked
+            try {
+              const { autoConfirmUserFn } = await import("@/lib/auth.functions");
+              const confirmRes = await autoConfirmUserFn({ data: { email: email.trim() } });
+              if (confirmRes.success) {
+                const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
+                  email: email.trim(),
+                  password,
+                });
+                if (!retryError && retryData.session) {
+                  toast.success("Account verified! Welcome back.");
+                  setUnconfirmedEmail(null);
+                  const target = search.redirect && search.redirect.startsWith("/") ? search.redirect : "/admin/workspace";
+                  navigate({ to: target, replace: true });
+                  return;
+                }
+              }
+            } catch {
+              // keep banner
+            }
           }
           throw error;
         }
@@ -287,13 +334,38 @@ function AuthPage() {
                       <div className="flex items-start gap-2.5">
                         <MailCheck className="mt-0.5 size-5 shrink-0 text-primary" />
                         <div>
-                          <p className="font-semibold text-foreground">Password reset email sent</p>
+                          <p className="font-semibold text-foreground">Password reset link ready</p>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            We've dispatched password reset instructions to <strong>{email}</strong>. Open the link to create your new password.
+                            If Gmail delivery is delayed or filtered by spam, use the direct reset button below to set your new password immediately.
                           </p>
                         </div>
                       </div>
                     </div>
+
+                    {directRecoveryLink ? (
+                      <div className="space-y-2">
+                        <a href={directRecoveryLink} className="block">
+                          <Button type="button" className="w-full">
+                            Reset password now &rarr;
+                          </Button>
+                        </a>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="w-full text-xs text-muted-foreground"
+                          onClick={() => {
+                            if (directRecoveryLink) {
+                              navigator.clipboard.writeText(directRecoveryLink);
+                              toast.success("Direct recovery link copied to clipboard!");
+                            }
+                          }}
+                        >
+                          Copy direct reset link
+                        </Button>
+                      </div>
+                    ) : null}
+
                     <Button
                       type="button"
                       variant="outline"
