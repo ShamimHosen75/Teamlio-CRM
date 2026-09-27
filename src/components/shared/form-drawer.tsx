@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
-interface FormDrawerProps {
-  trigger: ReactNode;
+export interface FormDrawerProps {
+  trigger?: ReactNode;
   title: string;
   description?: string;
   submitLabel?: string;
@@ -34,7 +34,7 @@ export function FormDrawer({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>{trigger}</SheetTrigger>
+      {trigger ? <SheetTrigger asChild>{trigger}</SheetTrigger> : null}
       <SheetContent
         side={isMobile ? "bottom" : "right"}
         className={cn(

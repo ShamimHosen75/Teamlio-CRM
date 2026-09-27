@@ -1,8 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { Building2, Globe, Mail, MapPin, Phone, Plus, UserCheck } from "lucide-react";
+import { Building2, Globe, Mail, MapPin, Phone, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { FormDrawer } from "@/components/shared/form-drawer";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -123,14 +122,7 @@ export function NewCompanyDrawer({
 
   return (
     <FormDrawer
-      trigger={
-        trigger ?? (
-          <Button size="sm" className="gap-1.5 shadow-sm">
-            <Plus className="size-4" />
-            <span>New Company</span>
-          </Button>
-        )
-      }
+      trigger={trigger}
       open={controlledOpen}
       onOpenChange={onOpenChange}
       title="Add New Company"
