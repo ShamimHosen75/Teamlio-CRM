@@ -5,7 +5,6 @@ import { NAV_SECTIONS } from "@/app/navigation";
 import { usePermissions } from "@/app/workspace";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { NewCompanyDrawer } from "@/components/crm/new-company-drawer";
 
 export function SidebarNav({
   collapsed,
@@ -18,7 +17,6 @@ export function SidebarNav({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [closed, setClosed] = useState<string[]>([]);
   const [expandedItems, setExpandedItems] = useState<string[]>(["/crm/companies"]);
-  const [newCompanyOpen, setNewCompanyOpen] = useState(false);
 
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
@@ -28,9 +26,8 @@ export function SidebarNav({
   const isActive = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
 
   const handleAction = (actionId?: string) => {
-    if (actionId === "new-company") {
-      setNewCompanyOpen(true);
-    }
+    // no-op: sidebar actions placeholder
+    void actionId;
   };
 
   return (
@@ -213,9 +210,6 @@ export function SidebarNav({
           );
         })}
       </nav>
-
-      {/* Global New Company Drawer triggered from sidebar */}
-      <NewCompanyDrawer open={newCompanyOpen} onOpenChange={setNewCompanyOpen} />
     </>
   );
 }
