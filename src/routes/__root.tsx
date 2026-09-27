@@ -16,6 +16,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import { WorkspaceProvider } from "@/app/workspace";
 import { AppShell } from "@/components/layout/app-shell";
 import { applyAppearance, readAppearance } from "@/lib/appearance";
@@ -152,10 +153,45 @@ function RootComponent() {
   }, []);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+    // Process any auth callbacks, email verification hashes, or errors in URL
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      const hashParams = new URLSearchParams(hash.replace(/^#/, ""));
+      const searchParams = new URLSearchParams(search);
+
+      const errorDescription =
+        hashParams.get("error_description") ||
+        searchParams.get("error_description") ||
+        hashParams.get("error") ||
+        searchParams.get("error");
+
+      if (errorDescription) {
+        toast.error(decodeURIComponent(errorDescription.replace(/\+/g, " ")));
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+
+      const type = hashParams.get("type");
+      if (type === "signup") {
+        toast.success("Email verified! Welcome to Teamlio.");
+      } else if (type === "invite") {
+        toast.success("Invitation accepted! Welcome to Teamlio.");
+      }
+    }
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       router.invalidate();
       if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+
+      if (event === "SIGNED_IN" && session?.user && typeof window !== "undefined") {
+        if (
+          window.location.pathname === "/" &&
+          (window.location.hash.includes("access_token") || window.location.search.includes("code"))
+        ) {
+          router.navigate({ to: "/admin/workspace", replace: true });
+        }
+      }
     });
     return () => sub.subscription.unsubscribe();
   }, [router, queryClient]);

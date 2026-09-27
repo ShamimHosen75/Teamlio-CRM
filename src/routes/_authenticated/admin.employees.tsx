@@ -1,6 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { PermissionGuard } from "@/components/shared/permission-guard";
@@ -99,7 +101,16 @@ function EmployeesPage() {
         <PageHeader
           title="Employees"
           description="Everyone working in this workspace, the role they hold and what that role unlocks."
-          actions={<OrgSwitcher orgs={orgs} value={activeOrgId} onChange={setOrgId} />}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <OrgSwitcher orgs={orgs} value={activeOrgId} onChange={setOrgId} />
+              <Link to="/admin/users">
+                <Button size="sm">
+                  <Plus className="size-4" /> Invite employee
+                </Button>
+              </Link>
+            </div>
+          }
         />
 
         {!activeOrgId ? (

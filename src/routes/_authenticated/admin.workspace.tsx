@@ -282,8 +282,19 @@ function MembersPanel({
                   return false;
                 }
                 try {
-                  await invite.mutateAsync({ email, role, job_title: jobTitle });
-                  toast.success(`Invite created for ${email}`);
+                  const res = (await invite.mutateAsync({ email, role, job_title: jobTitle })) as {
+                    emailSent?: boolean;
+                    alreadyRegistered?: boolean;
+                    message?: string;
+                  } | undefined;
+
+                  if (res?.emailSent) {
+                    toast.success(`Activation email sent to ${email}!`);
+                  } else if (res?.alreadyRegistered) {
+                    toast.success(res.message || "User added to workspace!");
+                  } else {
+                    toast.success(res?.message || `Invite created for ${email}`);
+                  }
                   setEmail("");
                   setJobTitle("");
                   return true;
@@ -381,11 +392,24 @@ function MembersPanel({
                   <p className="truncate text-sm font-medium">{i.email}</p>
                   <p className="text-xs text-muted-foreground">Will join as {i.role}</p>
                 </div>
-                {canManage ? (
-                  <Button size="sm" variant="ghost" onClick={() => cancelInvite.mutate(i.id)}>
-                    Cancel
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const link = `${window.location.origin}/auth?mode=signup&email=${encodeURIComponent(i.email)}`;
+                      navigator.clipboard.writeText(link);
+                      toast.success(`Activation link copied for ${i.email}!`);
+                    }}
+                  >
+                    Copy link
                   </Button>
-                ) : null}
+                  {canManage ? (
+                    <Button size="sm" variant="ghost" onClick={() => cancelInvite.mutate(i.id)}>
+                      Cancel
+                    </Button>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>

@@ -1,4 +1,4 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   AlertTriangle,
@@ -37,6 +37,9 @@ import {
   useTasks,
   useUsers,
 } from "@/hooks/use-data";
+import { useWorkspace } from "@/app/workspace";
+import { useSession } from "@/hooks/use-cloud";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -66,6 +69,8 @@ function DashboardPage() {
   const daily = useDailyUpdates();
   const clients = useClients();
   const activities = useActivities();
+  const { user } = useSession();
+  const { currentUser } = useWorkspace();
 
   const loading = projects.isLoading || tasks.isLoading || leads.isLoading;
   const failed = projects.isError || tasks.isError;
@@ -132,8 +137,24 @@ function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-[1600px]">
+      {user ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary-soft/40 px-4 py-2.5 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-success" />
+            <span>
+              Signed in as <strong>{currentUser.email}</strong>
+            </span>
+          </div>
+          <Link to="/admin/workspace">
+            <Button size="sm" className="h-7 text-xs">
+              Go to live workspace &rarr;
+            </Button>
+          </Link>
+        </div>
+      ) : null}
+
       <PageHeader
-        title={`Good morning, ${userName("usr_001").split(" ")[0]}`}
+        title={`Good morning, ${user && currentUser?.full_name ? currentUser.full_name.split(" ")[0] : userName("usr_001").split(" ")[0]}`}
         description="Here's what's happening across your workspace today."
         actions={
           <Tabs value={range} onValueChange={setRange}>

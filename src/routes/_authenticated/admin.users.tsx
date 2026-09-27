@@ -149,15 +149,28 @@ function AdminUsersPage() {
                           {ORG_ROLE_TO_ROLE_NAME[i.role]} · invited {fmtDate(i.created_at)}
                         </p>
                       </div>
-                      {canManage ? (
+                      <div className="flex items-center gap-2">
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          onClick={() => cancelInvite.mutate(i.id, { onSuccess: () => toast.success("Invitation cancelled") })}
+                          onClick={() => {
+                            const link = `${window.location.origin}/auth?mode=signup&email=${encodeURIComponent(i.email)}`;
+                            navigator.clipboard.writeText(link);
+                            toast.success(`Activation link copied for ${i.email}!`);
+                          }}
                         >
-                          Cancel
+                          Copy activation link
                         </Button>
-                      ) : null}
+                        {canManage ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => cancelInvite.mutate(i.id, { onSuccess: () => toast.success("Invitation cancelled") })}
+                          >
+                            Cancel
+                          </Button>
+                        ) : null}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -316,8 +329,19 @@ function InviteDrawer({ organizationId }: { organizationId: string | undefined }
           return false;
         }
         try {
-          await invite.mutateAsync({ email: form.email, role: form.role, job_title: form.job_title });
-          toast.success(`Invitation created for ${form.email}`);
+          const res = (await invite.mutateAsync({ email: form.email, role: form.role, job_title: form.job_title })) as {
+            emailSent?: boolean;
+            alreadyRegistered?: boolean;
+            message?: string;
+          } | undefined;
+
+          if (res?.emailSent) {
+            toast.success(`Activation email sent to ${form.email}!`);
+          } else if (res?.alreadyRegistered) {
+            toast.success(res.message || "User added to workspace!");
+          } else {
+            toast.success(res?.message || `Invitation created for ${form.email}`);
+          }
           setForm({ email: "", job_title: "", role: "member" });
           setError("");
           return true;

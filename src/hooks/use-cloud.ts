@@ -393,14 +393,35 @@ export function useInviteMember(organizationId: string | undefined) {
   return useMutation({
     mutationFn: async (input: { email: string; role: OrgRole; job_title?: string }) => {
       if (!organizationId) throw new Error("Select an organization first");
-      const { error } = await supabase.from("organization_invites").insert({
-        organization_id: organizationId,
-        email: input.email.trim().toLowerCase(),
-        role: input.role,
-        job_title: input.job_title || null,
-        invited_by: user?.id ?? null,
-      });
-      if (error) throw error;
+      const normalizedEmail = input.email.trim().toLowerCase();
+
+      try {
+        const { sendEmployeeInviteFn } = await import("@/lib/auth.functions");
+        const res = await sendEmployeeInviteFn({
+          data: {
+            organizationId,
+            email: normalizedEmail,
+            role: input.role,
+            job_title: input.job_title,
+            redirectTo: typeof window !== "undefined" ? `${window.location.origin}/auth` : undefined,
+          },
+        });
+        return res;
+      } catch (err) {
+        console.warn("Server invite function error, falling back to direct table insert:", err);
+        const { error } = await supabase.from("organization_invites").upsert(
+          {
+            organization_id: organizationId,
+            email: normalizedEmail,
+            role: input.role,
+            job_title: input.job_title || null,
+            invited_by: user?.id ?? null,
+          },
+          { onConflict: "organization_id,email" },
+        );
+        if (error) throw error;
+        return { success: true, emailSent: false, message: `Invite created for ${normalizedEmail}` };
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["cloud"] }),
   });
