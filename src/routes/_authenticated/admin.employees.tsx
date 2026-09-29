@@ -14,12 +14,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fmtDate } from "@/lib/format";
 import { ORG_ROLE_TO_ROLE_NAME, ORG_ROLE_DESCRIPTIONS, ROLE_PERMISSIONS, PERMISSIONS } from "@/lib/permissions";
 import { useActiveOrg } from "@/hooks/use-active-org";
+import { useWorkspace } from "@/app/workspace";
+import { store } from "@/services/store";
 import {
   ORG_ROLES,
+  resolveRequestedRole,
+  useAllProfiles,
   useMyMembership,
   useOrgMembers,
   useOrgProjects,
   useOrgTasks,
+  useSession,
   useUpdateMember,
   type CloudMember,
   type OrgRole,
@@ -75,25 +80,232 @@ function accessFor(role: OrgRole) {
 }
 
 function EmployeesPage() {
-  const { orgs, activeOrgId, setOrgId } = useActiveOrg();
-  const { data: members = [], isLoading } = useOrgMembers(activeOrgId);
-  const { data: membership } = useMyMembership(activeOrgId);
+  const { user } = useSession();
+  const { currentUser } = useWorkspace();
+  const { orgs, activeOrgId, activeOrg, setOrgId } = useActiveOrg();
+  const { data: members = [], isLoading: isMembersLoading } = useOrgMembers(activeOrgId);
+  const { data: allProfiles = [], isLoading: isProfilesLoading } = useAllProfiles();
+  const { data: membership, isLoading: isMembershipLoading } = useMyMembership(activeOrgId);
   const { data: projects = [] } = useOrgProjects(activeOrgId);
   const { data: tasks = [] } = useOrgTasks(activeOrgId);
   const updateMember = useUpdateMember();
-  const canManage = membership?.role === "owner" || membership?.role === "admin";
+  const isLoading = isMembersLoading || isProfilesLoading || isMembershipLoading;
+
+  const userReqRole = (user?.user_metadata?.requested_role as string | undefined)?.toLowerCase();
+  const isOwner =
+    membership?.role === "owner" ||
+    activeOrg?.owner_id === user?.id ||
+    userReqRole === "owner" ||
+    currentUser?.role_id === "role_1" ||
+    currentUser?.job_title?.toLowerCase().includes("owner") ||
+    (currentUser as any)?.role === "Organization Owner";
+
+  const isAdmin =
+    membership?.role === "admin" ||
+    userReqRole === "admin" ||
+    currentUser?.role_id === "role_2" ||
+    currentUser?.job_title?.toLowerCase().includes("admin") ||
+    (currentUser as any)?.role === "Admin";
+
+  const isManager =
+    membership?.role === "manager" ||
+    userReqRole === "manager" ||
+    currentUser?.role_id === "role_3" ||
+    currentUser?.job_title?.toLowerCase().includes("manager") ||
+    currentUser?.job_title?.toLowerCase().includes("lead") ||
+    (currentUser as any)?.role === "Project Manager";
+
+  // Check if current user has an elevated role: admin / owner / manager
+  const isElevatedRole = isOwner || isAdmin || isManager;
+  const canManage = isOwner || isAdmin;
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | OrgRole>("all");
 
+  const allEmployees = useMemo(() => {
+    const memberMap = new Map<string, CloudMember>();
+
+    // 1. Add members explicitly assigned to the active workspace
+    for (const m of members) {
+      const key = m.user_id || m.id;
+      memberMap.set(key, m);
+    }
+
+    // 2. Ensure current authenticated user's own account is included
+    if (user) {
+      const existing = memberMap.get(user.id);
+      const userJobTitle =
+        (user.user_metadata?.job_title as string) ||
+        (user.user_metadata?.requested_role ? resolveRequestedRole(user.user_metadata?.requested_role).jobTitle : (isOwner ? "Workspace Owner" : "Team Member"));
+      const userRole: OrgRole =
+        membership?.role ||
+        (activeOrg?.owner_id === user.id ? "owner" : (user.user_metadata?.requested_role?.toLowerCase() as OrgRole) || (isOwner ? "owner" : isAdmin ? "admin" : isManager ? "manager" : "member"));
+
+      if (existing) {
+        if (!existing.profile) {
+          existing.profile = {
+            id: user.id,
+            full_name: (user.user_metadata?.full_name as string) || user.email?.split("@")[0] || "User",
+            email: user.email || "",
+            avatar_url: (user.user_metadata?.avatar_url as string) || null,
+            job_title: userJobTitle,
+            created_at: user.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+        }
+      } else {
+        memberMap.set(user.id, {
+          id: `user_${user.id}`,
+          organization_id: activeOrgId || "",
+          user_id: user.id,
+          role: userRole,
+          status: "active",
+          job_title: userJobTitle,
+          created_at: user.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          profile: {
+            id: user.id,
+            full_name: (user.user_metadata?.full_name as string) || user.email?.split("@")[0] || "User",
+            email: user.email || "",
+            avatar_url: (user.user_metadata?.avatar_url as string) || null,
+            job_title: userJobTitle,
+            created_at: user.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        });
+      }
+    }
+
+    // 3. Add all profiles from Supabase database
+    for (const p of allProfiles) {
+      if (memberMap.has(p.id)) {
+        const existing = memberMap.get(p.id)!;
+        if (!existing.profile) existing.profile = p;
+        continue;
+      }
+
+      const emailMatch = Array.from(memberMap.values()).find(
+        (m) => m.profile?.email && m.profile.email.toLowerCase() === (p.email || "").toLowerCase()
+      );
+      if (emailMatch) {
+        if (!emailMatch.profile) emailMatch.profile = p;
+        continue;
+      }
+
+      const pTitle = (p.job_title || "").toLowerCase();
+      const pRole: OrgRole =
+        activeOrg?.owner_id === p.id
+          ? "owner"
+          : pTitle.includes("admin")
+          ? "admin"
+          : pTitle.includes("manager") || pTitle.includes("lead")
+          ? "manager"
+          : "member";
+
+      memberMap.set(p.id, {
+        id: `profile_${p.id}`,
+        organization_id: activeOrgId || "",
+        user_id: p.id,
+        role: pRole,
+        status: "active",
+        job_title: p.job_title || (pRole === "owner" ? "Workspace Owner" : "Team Member"),
+        created_at: p.created_at || new Date().toISOString(),
+        updated_at: p.updated_at || p.created_at || new Date().toISOString(),
+        profile: p,
+      });
+    }
+
+    // 4. Add CRM store users (mock/demo employees) deduplicated by email and name
+    const existingEmails = new Set(
+      Array.from(memberMap.values())
+        .map((m) => (m.profile?.email || "").toLowerCase())
+        .filter(Boolean)
+    );
+    const existingNames = new Set(
+      Array.from(memberMap.values())
+        .map((m) => (m.profile?.full_name || "").toLowerCase())
+        .filter(Boolean)
+    );
+
+    for (const u of store.users) {
+      const email = (u.email || "").toLowerCase();
+      const name = (u.full_name || "").toLowerCase();
+      if (existingEmails.has(email) || existingNames.has(name) || memberMap.has(u.id)) {
+        continue;
+      }
+
+      const uTitle = (u.job_title || "").toLowerCase();
+      const uRole: OrgRole =
+        u.role_id === "role_1" || uTitle.includes("owner")
+          ? "owner"
+          : u.role_id === "role_2" || uTitle.includes("admin")
+          ? "admin"
+          : u.role_id === "role_3" || uTitle.includes("manager") || uTitle.includes("lead")
+          ? "manager"
+          : "member";
+
+      const uStatus = (u.status === "inactive" || u.status === "suspended") ? "disabled" : "active";
+
+      memberMap.set(u.id, {
+        id: `store_${u.id}`,
+        organization_id: activeOrgId || "",
+        user_id: u.id,
+        role: uRole,
+        status: uStatus,
+        job_title: u.job_title || "Team Member",
+        created_at: u.created_at || new Date().toISOString(),
+        updated_at: u.updated_at || new Date().toISOString(),
+        profile: {
+          id: u.id,
+          full_name: u.full_name,
+          email: u.email,
+          avatar_url: u.avatar_url || null,
+          job_title: u.job_title || null,
+          created_at: u.created_at || new Date().toISOString(),
+          updated_at: u.updated_at || new Date().toISOString(),
+        },
+      });
+    }
+
+    return Array.from(memberMap.values());
+  }, [members, user, allProfiles, activeOrgId, isOwner, isAdmin, isManager, membership?.role, activeOrg?.owner_id]);
+
+  // Show all employees profile if user role is admin / owner / manager, including user own account.
+  // Otherwise, only show user's own account.
+  const visibleMembers = useMemo(() => {
+    if (isElevatedRole) {
+      return allEmployees;
+    }
+
+    // Regular employee / member: show only user's own profile / account
+    if (user?.id) {
+      const self = allEmployees.filter(
+        (m) =>
+          m.user_id === user.id ||
+          (user.email && m.profile?.email?.toLowerCase() === user.email.toLowerCase())
+      );
+      if (self.length > 0) return self;
+    }
+
+    if (currentUser?.id) {
+      const self = allEmployees.filter((m) => m.user_id === currentUser.id);
+      if (self.length > 0) return self;
+    }
+
+    return allEmployees.slice(0, 1);
+  }, [allEmployees, isElevatedRole, user?.id, user?.email, currentUser?.id]);
+
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return members.filter((m) => {
+    return visibleMembers.filter((m) => {
       if (roleFilter !== "all" && m.role !== roleFilter) return false;
       if (!q) return true;
       return `${m.profile?.full_name ?? ""} ${m.profile?.email ?? ""} ${m.job_title ?? ""}`.toLowerCase().includes(q);
     });
-  }, [members, roleFilter, search]);
+  }, [visibleMembers, roleFilter, search]);
+
+  const currentUserId = user?.id || currentUser?.id;
+  const currentUserEmail = user?.email?.toLowerCase();
 
   return (
     <PermissionGuard permission="user.read" mode="page">
@@ -121,21 +333,21 @@ function EmployeesPage() {
         ) : (
           <>
             <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard label="Employees" value={members.length} loading={isLoading} />
+              <StatCard label="Employees" value={visibleMembers.length} loading={isLoading} />
               <StatCard
                 label="Active"
-                value={members.filter((m) => m.status === "active").length}
+                value={visibleMembers.filter((m) => m.status === "active").length}
                 tone="success"
                 loading={isLoading}
               />
               <StatCard
                 label="Managers & admins"
-                value={members.filter((m) => m.role === "owner" || m.role === "admin" || m.role === "manager").length}
+                value={visibleMembers.filter((m) => m.role === "owner" || m.role === "admin" || m.role === "manager").length}
                 loading={isLoading}
               />
               <StatCard
                 label="Disabled"
-                value={members.filter((m) => m.status === "disabled").length}
+                value={visibleMembers.filter((m) => m.status === "disabled").length}
                 tone="warning"
                 loading={isLoading}
               />
@@ -165,17 +377,52 @@ function EmployeesPage() {
             </div>
 
             <div className="space-y-3 md:hidden">
-              {rows.map((m) => (
-                <EmployeeCard
-                  key={m.id}
-                  member={m}
-                  canManage={canManage}
-                  projectCount={projects.filter((p) => p.manager_id === m.user_id).length}
-                  taskCount={tasks.filter((t) => t.assignee_id === m.user_id && t.status !== "completed").length}
-                  onRole={(role) => updateMember.mutate({ id: m.id, role }, { onSuccess: () => toast.success(`Role updated to ${ORG_ROLE_TO_ROLE_NAME[role]}`) })}
-                  onStatus={(status) => updateMember.mutate({ id: m.id, status }, { onSuccess: () => toast.success("Status updated") })}
-                />
-              ))}
+              {rows.map((m) => {
+                const isSelf =
+                  (currentUserId && m.user_id === currentUserId) ||
+                  (currentUserEmail && m.profile?.email?.toLowerCase() === currentUserEmail);
+                return (
+                  <EmployeeCard
+                    key={m.id}
+                    member={m}
+                    canManage={canManage}
+                    isCurrentUser={!!isSelf}
+                    projectCount={projects.filter((p) => p.manager_id === m.user_id).length}
+                    taskCount={tasks.filter((t) => t.assignee_id === m.user_id && t.status !== "completed").length}
+                    onRole={(role) =>
+                      updateMember.mutate(
+                        {
+                          id: m.id,
+                          role,
+                          organization_id: activeOrgId,
+                          user_id: m.user_id,
+                          job_title: m.job_title,
+                        },
+                        {
+                          onSuccess: () =>
+                            toast.success(`Role updated to ${ORG_ROLE_TO_ROLE_NAME[role]}`),
+                          onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the role"),
+                        },
+                      )
+                    }
+                    onStatus={(status) =>
+                      updateMember.mutate(
+                        {
+                          id: m.id,
+                          status,
+                          organization_id: activeOrgId,
+                          user_id: m.user_id,
+                          job_title: m.job_title,
+                        },
+                        {
+                          onSuccess: () => toast.success("Status updated"),
+                          onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the status"),
+                        },
+                      )
+                    }
+                  />
+                );
+              })}
               {!rows.length && !isLoading ? <EmptyState title="No matching employees" description="Try a different name or role." /> : null}
             </div>
 
@@ -192,34 +439,52 @@ function EmployeesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((m) => (
-                    <EmployeeRow
-                      key={m.id}
-                      member={m}
-                      canManage={canManage}
-                      projectCount={projects.filter((p) => p.manager_id === m.user_id).length}
-                      taskCount={tasks.filter((t) => t.assignee_id === m.user_id && t.status !== "completed").length}
-                      onRole={(role) =>
-                        updateMember.mutate(
-                          { id: m.id, role },
-                          {
-                            onSuccess: () =>
-                              toast.success(`Role updated to ${ORG_ROLE_TO_ROLE_NAME[role]}`),
-                            onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the role"),
-                          },
-                        )
-                      }
-                      onStatus={(status) =>
-                        updateMember.mutate(
-                          { id: m.id, status },
-                          {
-                            onSuccess: () => toast.success("Status updated"),
-                            onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the status"),
-                          },
-                        )
-                      }
-                    />
-                  ))}
+                  {rows.map((m) => {
+                    const isSelf =
+                      (currentUserId && m.user_id === currentUserId) ||
+                      (currentUserEmail && m.profile?.email?.toLowerCase() === currentUserEmail);
+                    return (
+                      <EmployeeRow
+                        key={m.id}
+                        member={m}
+                        canManage={canManage}
+                        isCurrentUser={!!isSelf}
+                        projectCount={projects.filter((p) => p.manager_id === m.user_id).length}
+                        taskCount={tasks.filter((t) => t.assignee_id === m.user_id && t.status !== "completed").length}
+                        onRole={(role) =>
+                          updateMember.mutate(
+                            {
+                              id: m.id,
+                              role,
+                              organization_id: activeOrgId,
+                              user_id: m.user_id,
+                              job_title: m.job_title,
+                            },
+                            {
+                              onSuccess: () =>
+                                toast.success(`Role updated to ${ORG_ROLE_TO_ROLE_NAME[role]}`),
+                              onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the role"),
+                            },
+                          )
+                        }
+                        onStatus={(status) =>
+                          updateMember.mutate(
+                            {
+                              id: m.id,
+                              status,
+                              organization_id: activeOrgId,
+                              user_id: m.user_id,
+                              job_title: m.job_title,
+                            },
+                            {
+                              onSuccess: () => toast.success("Status updated"),
+                              onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the status"),
+                            },
+                          )
+                        }
+                      />
+                    );
+                  })}
                   {!rows.length && !isLoading ? (
                     <tr>
                       <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -241,9 +506,18 @@ function EmployeesPage() {
   );
 }
 
-function EmployeeCard({ member, canManage, projectCount, taskCount, onRole, onStatus }: {
+function EmployeeCard({
+  member,
+  canManage,
+  isCurrentUser,
+  projectCount,
+  taskCount,
+  onRole,
+  onStatus,
+}: {
   member: CloudMember;
   canManage: boolean;
+  isCurrentUser?: boolean;
   projectCount: number;
   taskCount: number;
   onRole: (role: OrgRole) => void;
@@ -255,7 +529,14 @@ function EmployeeCard({ member, canManage, projectCount, taskCount, onRole, onSt
   return (
     <article className="surface-card min-w-0 p-4">
       <div className="min-w-0">
-        <p className="truncate font-medium">{name}</p>
+        <p className="truncate font-medium flex items-center gap-1.5">
+          {name}
+          {isCurrentUser ? (
+            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal text-muted-foreground">
+              You
+            </Badge>
+          ) : null}
+        </p>
         <p className="truncate text-xs text-muted-foreground">{member.profile?.email ?? "—"}</p>
         {member.job_title ? <p className="text-xs text-muted-foreground">{member.job_title}</p> : null}
       </div>
@@ -288,6 +569,7 @@ function EmployeeCard({ member, canManage, projectCount, taskCount, onRole, onSt
 function EmployeeRow({
   member,
   canManage,
+  isCurrentUser,
   projectCount,
   taskCount,
   onRole,
@@ -295,6 +577,7 @@ function EmployeeRow({
 }: {
   member: CloudMember;
   canManage: boolean;
+  isCurrentUser?: boolean;
   projectCount: number;
   taskCount: number;
   onRole: (role: OrgRole) => void;
@@ -307,7 +590,14 @@ function EmployeeRow({
   return (
     <tr className="border-b align-top last:border-0">
       <td className="px-4 py-3">
-        <p className="font-medium">{name}</p>
+        <p className="font-medium flex items-center gap-1.5">
+          {name}
+          {isCurrentUser ? (
+            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal text-muted-foreground">
+              You
+            </Badge>
+          ) : null}
+        </p>
         <p className="text-xs text-muted-foreground">{member.profile?.email ?? "—"}</p>
         {member.job_title ? <p className="text-xs text-muted-foreground">{member.job_title}</p> : null}
       </td>

@@ -338,7 +338,7 @@ function slugify(name: string) {
 }
 
 /** Map a requested_role string to the org_role enum and a display job title. */
-function resolveRequestedRole(requestedRole: string | undefined): { role: OrgRole; jobTitle: string } {
+export function resolveRequestedRole(requestedRole: string | undefined): { role: OrgRole; jobTitle: string } {
   switch (requestedRole) {
     case "admin":
       return { role: "admin", jobTitle: "Administrator" };
@@ -441,10 +441,46 @@ export function useCancelInvite() {
 export function useUpdateMember() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; role?: OrgRole; status?: Database["public"]["Enums"]["member_status"] }) => {
-      const { id, ...patch } = input;
-      const { error } = await supabase.from("organization_members").update(patch).eq("id", id);
+    mutationFn: async (input: {
+      id: string;
+      role?: OrgRole;
+      status?: Database["public"]["Enums"]["member_status"];
+      organization_id?: string;
+      user_id?: string;
+      job_title?: string;
+    }) => {
+      const { id, organization_id, user_id, job_title, ...patch } = input;
+      const isSynthetic = id.startsWith("profile_") || id.startsWith("user_") || id.startsWith("store_");
+      if (isSynthetic && organization_id && user_id) {
+        const { error } = await supabase.from("organization_members").upsert(
+          {
+            organization_id,
+            user_id,
+            role: patch.role ?? "member",
+            status: patch.status ?? "active",
+            job_title: job_title ?? null,
+          },
+          { onConflict: "organization_id,user_id" }
+        );
+        if (error) throw error;
+        return;
+      }
+
+      const { data, error } = await supabase.from("organization_members").update(patch).eq("id", id).select();
       if (error) throw error;
+      if ((!data || data.length === 0) && organization_id && user_id) {
+        const { error: upsertErr } = await supabase.from("organization_members").upsert(
+          {
+            organization_id,
+            user_id,
+            role: patch.role ?? "member",
+            status: patch.status ?? "active",
+            job_title: job_title ?? null,
+          },
+          { onConflict: "organization_id,user_id" }
+        );
+        if (upsertErr) throw upsertErr;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["cloud"] }),
   });
