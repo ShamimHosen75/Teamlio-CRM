@@ -451,6 +451,12 @@ export function useUpdateMember() {
     }) => {
       const { id, organization_id, user_id, job_title, ...patch } = input;
       const isSynthetic = id.startsWith("profile_") || id.startsWith("user_") || id.startsWith("store_");
+
+      const updateData: Database["public"]["Tables"]["organization_members"]["Update"] = {};
+      if (patch.role !== undefined) updateData.role = patch.role;
+      if (patch.status !== undefined) updateData.status = patch.status;
+      if (job_title !== undefined) updateData.job_title = job_title;
+
       if (isSynthetic && organization_id && user_id) {
         const { error } = await supabase.from("organization_members").upsert(
           {
@@ -463,11 +469,24 @@ export function useUpdateMember() {
           { onConflict: "organization_id,user_id" }
         );
         if (error) throw error;
+
+        if (job_title) {
+          try {
+            await supabase.from("profiles").update({ job_title }).eq("id", user_id);
+          } catch {
+            // Profile update might be restricted by RLS for other users
+          }
+        }
         return;
       }
 
-      const { data, error } = await supabase.from("organization_members").update(patch).eq("id", id).select();
+      const { data, error } = await supabase
+        .from("organization_members")
+        .update(updateData)
+        .eq("id", id)
+        .select();
       if (error) throw error;
+
       if ((!data || data.length === 0) && organization_id && user_id) {
         const { error: upsertErr } = await supabase.from("organization_members").upsert(
           {
@@ -481,8 +500,51 @@ export function useUpdateMember() {
         );
         if (upsertErr) throw upsertErr;
       }
+
+      if (user_id && job_title) {
+        try {
+          await supabase.from("profiles").update({ job_title }).eq("id", user_id);
+        } catch {
+          // Profile update might be restricted by RLS for other users
+        }
+      }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["cloud"] }),
+    onMutate: async (newMember) => {
+      await qc.cancelQueries({ queryKey: ["cloud", "members"] });
+      const previousMembers = qc.getQueriesData({ queryKey: ["cloud", "members"] });
+
+      qc.setQueriesData({ queryKey: ["cloud", "members"] }, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((m: any) => {
+          if (m.id === newMember.id || (newMember.user_id && m.user_id === newMember.user_id)) {
+            return {
+              ...m,
+              ...(newMember.role ? { role: newMember.role } : {}),
+              ...(newMember.status ? { status: newMember.status } : {}),
+              ...(newMember.job_title ? { job_title: newMember.job_title } : {}),
+            };
+          }
+          return m;
+        });
+      });
+
+      return { previousMembers };
+    },
+    onError: (_err, _newMember, context) => {
+      if (context?.previousMembers) {
+        for (const [queryKey, data] of context.previousMembers) {
+          qc.setQueryData(queryKey, data);
+        }
+      }
+    },
+    onSettled: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["cloud"] }),
+        qc.refetchQueries({ queryKey: ["cloud", "members"] }),
+        qc.refetchQueries({ queryKey: ["cloud", "all_profiles"] }),
+        qc.refetchQueries({ queryKey: ["cloud", "membership"] }),
+      ]);
+    },
   });
 }
 

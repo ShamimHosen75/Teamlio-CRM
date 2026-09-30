@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { UserPlus } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtDateTime } from "@/lib/format";
+import { useWorkspace } from "@/app/workspace";
 import { useRoles, useUsers } from "@/hooks/use-data";
 import type { User } from "@/lib/types";
 
@@ -32,8 +33,10 @@ export const Route = createFileRoute("/users")({
 function UsersPage() {
   const { data: users = [], isLoading } = useUsers();
   const { data: roles = [] } = useRoles();
+  const { can } = useWorkspace();
 
   const roleName = (id: string) => roles.find((r) => r.id === id)?.name ?? "—";
+  const canManage = can("user.manage");
 
   const columns: Column<User>[] = [
     { key: "user", header: "User", sortable: true, sortValue: (r) => r.full_name, render: (r) => <UserCell userId={r.id} subtitle={r.email} /> },
@@ -41,20 +44,24 @@ function UsersPage() {
     { key: "role", header: "Role", hideBelow: "md", render: (r) => roleName(r.role_id) },
     { key: "status", header: "Status", sortable: true, sortValue: (r) => r.status, render: (r) => <StatusBadge status={r.status} /> },
     { key: "last", header: "Last login", hideBelow: "xl", render: (r) => (r.last_login_at ? fmtDateTime(r.last_login_at) : "Never") },
-    {
-      key: "actions",
-      header: "",
-      render: (r) => (
-        <ConfirmDialog
-          trigger={<Button variant="ghost" size="sm">Deactivate</Button>}
-          title={`Deactivate ${r.full_name}?`}
-          description="They will immediately lose access to this workspace. You can reactivate them later."
-          confirmLabel="Deactivate"
-          destructive
-          onConfirm={() => toast.success(`${r.full_name} deactivated`)}
-        />
-      ),
-    },
+    ...(canManage
+      ? [
+          {
+            key: "actions" as const,
+            header: "",
+            render: (r: User) => (
+              <ConfirmDialog
+                trigger={<Button variant="ghost" size="sm">Deactivate</Button>}
+                title={`Deactivate ${r.full_name}?`}
+                description="They will immediately lose access to this workspace. You can reactivate them later."
+                confirmLabel="Deactivate"
+                destructive
+                onConfirm={() => toast.success(`${r.full_name} deactivated`)}
+              />
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (

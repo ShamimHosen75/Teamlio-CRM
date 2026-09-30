@@ -51,42 +51,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const currentUser = useMemo<User>(() => {
-    const email =
-      profileOverride.email ||
-      profile?.email ||
-      user?.email ||
-      baseUser.email;
-
-    const full_name =
-      profileOverride.full_name ||
-      profile?.full_name ||
-      (user?.user_metadata?.full_name as string | undefined) ||
-      (user?.email ? user.email.split("@")[0] : undefined) ||
-      baseUser.full_name;
-
-    const job_title =
-      profileOverride.job_title ||
-      profile?.job_title ||
-      (user ? "Workspace Member" : baseUser.job_title);
-
-    const avatar_url =
-      profileOverride.avatar_url !== undefined
-        ? profileOverride.avatar_url
-        : profile?.avatar_url || baseUser.avatar_url;
-
-    const id = user?.id || baseUser.id;
-
-    return {
-      ...baseUser,
-      id,
-      email,
-      full_name,
-      job_title,
-      avatar_url,
-    };
-  }, [baseUser, user, profile, profileOverride]);
-
   const defaultRole = roles.find((r) => r.id === baseUser.role_id)?.name ?? "Organization Owner";
   const [demoRoleName, setDemoRoleName] = useState(defaultRole);
 
@@ -113,6 +77,47 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setDemoRoleName(role);
     }
   }, [user]);
+
+  const currentUser = useMemo<User>(() => {
+    const email =
+      profileOverride.email ||
+      profile?.email ||
+      user?.email ||
+      baseUser.email;
+
+    const full_name =
+      profileOverride.full_name ||
+      profile?.full_name ||
+      (user?.user_metadata?.full_name as string | undefined) ||
+      (user?.email ? user.email.split("@")[0] : undefined) ||
+      baseUser.full_name;
+
+    const job_title =
+      profileOverride.job_title ||
+      profile?.job_title ||
+      (user ? "Workspace Member" : baseUser.job_title);
+
+    const avatar_url =
+      profileOverride.avatar_url !== undefined
+        ? profileOverride.avatar_url
+        : profile?.avatar_url || baseUser.avatar_url;
+
+    const id = user?.id || baseUser.id;
+
+    const resolvedRoleId = user
+      ? roles.find((r) => r.name.toLowerCase() === roleName.toLowerCase())?.id ?? "role_7"
+      : baseUser.role_id;
+
+    return {
+      ...baseUser,
+      id,
+      email,
+      full_name,
+      job_title,
+      avatar_url,
+      role_id: resolvedRoleId,
+    };
+  }, [baseUser, user, profile, profileOverride, roleName]);
 
   const permissions = useMemo(() => ROLE_PERMISSIONS[roleName] ?? [], [roleName]);
   const can = useCallback((permission: Permission) => permissions.includes(permission), [permissions]);

@@ -80,7 +80,7 @@ function accessFor(role: OrgRole) {
 
 function EmployeesPage() {
   const { user } = useSession();
-  const { currentUser } = useWorkspace();
+  const { currentUser, roleName } = useWorkspace();
   const { orgs, activeOrgId, activeOrg, setOrgId } = useActiveOrg();
   const { data: members = [], isLoading: isMembersLoading } = useOrgMembers(activeOrgId);
   const { data: allProfiles = [], isLoading: isProfilesLoading } = useAllProfiles();
@@ -91,31 +91,28 @@ function EmployeesPage() {
   const isLoading = isMembersLoading || isProfilesLoading || isMembershipLoading;
 
   const userReqRole = (user?.user_metadata?.requested_role as string | undefined)?.toLowerCase();
-  const isOwner =
-    membership?.role === "owner" ||
-    activeOrg?.owner_id === user?.id ||
-    userReqRole === "owner" ||
-    currentUser?.role_id === "role_1" ||
-    currentUser?.job_title?.toLowerCase().includes("owner") ||
-    (currentUser as any)?.role === "Organization Owner";
 
-  const isAdmin =
-    membership?.role === "admin" ||
-    userReqRole === "admin" ||
-    currentUser?.role_id === "role_2" ||
-    currentUser?.job_title?.toLowerCase().includes("admin") ||
-    (currentUser as any)?.role === "Admin";
+  const isOwner = user
+    ? membership?.role === "owner" ||
+      activeOrg?.owner_id === user?.id ||
+      userReqRole === "owner" ||
+      roleName === "Organization Owner"
+    : roleName === "Organization Owner";
 
-  const isManager =
-    membership?.role === "manager" ||
-    userReqRole === "manager" ||
-    currentUser?.role_id === "role_3" ||
-    currentUser?.job_title?.toLowerCase().includes("manager") ||
-    currentUser?.job_title?.toLowerCase().includes("lead") ||
-    (currentUser as any)?.role === "Project Manager";
+  const isAdmin = user
+    ? membership?.role === "admin" ||
+      userReqRole === "admin" ||
+      roleName === "Admin"
+    : roleName === "Admin";
 
-  // Check if current user has an elevated role: admin / owner / manager
-  const isElevatedRole = isOwner || isAdmin || isManager;
+  const isManager = user
+    ? membership?.role === "manager" ||
+      userReqRole === "manager" ||
+      roleName === "Project Manager" ||
+      roleName === "Team Lead"
+    : roleName === "Project Manager" || roleName === "Team Lead";
+
+  // Only workspace owners and administrators are permitted to manage roles and statuses
   const canManage = isOwner || isAdmin;
 
   const [search, setSearch] = useState("");
@@ -152,6 +149,9 @@ function EmployeesPage() {
             updated_at: new Date().toISOString(),
           };
         }
+        if (!existing.job_title) {
+          existing.job_title = userJobTitle;
+        }
       } else {
         memberMap.set(user.id, {
           id: `user_${user.id}`,
@@ -161,7 +161,6 @@ function EmployeesPage() {
           status: "active",
           job_title: userJobTitle,
           created_at: user.created_at || new Date().toISOString(),
-          updated_at: new Date().toISOString(),
           profile: {
             id: user.id,
             full_name: (user.user_metadata?.full_name as string) || user.email?.split("@")[0] || "User",
@@ -207,9 +206,8 @@ function EmployeesPage() {
         user_id: p.id,
         role: pRole,
         status: "active",
-        job_title: p.job_title || (pRole === "owner" ? "Workspace Owner" : "Team Member"),
+        job_title: p.job_title || (pRole === "owner" ? "Workspace Owner" : ORG_ROLE_TO_ROLE_NAME[pRole]),
         created_at: p.created_at || new Date().toISOString(),
-        updated_at: p.updated_at || p.created_at || new Date().toISOString(),
         profile: p,
       });
     }
@@ -217,30 +215,9 @@ function EmployeesPage() {
     return Array.from(memberMap.values());
   }, [members, user, allProfiles, activeOrgId, isOwner, isAdmin, isManager, membership?.role, activeOrg?.owner_id]);
 
-  // Show all employees profile if user role is admin / owner / manager, including user own account.
-  // Otherwise, only show user's own account.
-  const visibleMembers = useMemo(() => {
-    if (isElevatedRole) {
-      return allEmployees;
-    }
-
-    // Regular employee / member: show only user's own profile / account
-    if (user?.id) {
-      const self = allEmployees.filter(
-        (m) =>
-          m.user_id === user.id ||
-          (user.email && m.profile?.email?.toLowerCase() === user.email.toLowerCase())
-      );
-      if (self.length > 0) return self;
-    }
-
-    if (currentUser?.id) {
-      const self = allEmployees.filter((m) => m.user_id === currentUser.id);
-      if (self.length > 0) return self;
-    }
-
-    return allEmployees.slice(0, 1);
-  }, [allEmployees, isElevatedRole, user?.id, user?.email, currentUser?.id]);
+  // Show all workspace employees so teammates can see their colleagues,
+  // while role and status modifications remain strictly locked to admin or owner.
+  const visibleMembers = allEmployees;
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -263,11 +240,13 @@ function EmployeesPage() {
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <OrgSwitcher orgs={orgs} value={activeOrgId} onChange={setOrgId} />
-              <Link to="/admin/users">
-                <Button size="sm">
-                  <Plus className="size-4" /> Invite employee
-                </Button>
-              </Link>
+              {canManage ? (
+                <Link to="/admin/users">
+                  <Button size="sm">
+                    <Plus className="size-4" /> Invite employee
+                  </Button>
+                </Link>
+              ) : null}
             </div>
           }
         />
@@ -336,37 +315,47 @@ function EmployeesPage() {
                     isCurrentUser={!!isSelf}
                     projectCount={projects.filter((p) => p.manager_id === m.user_id).length}
                     taskCount={tasks.filter((t) => t.assignee_id === m.user_id && t.status !== "completed").length}
-                    onRole={(role) =>
+                    onRole={(role) => {
+                      if (!canManage) {
+                        toast.error("Only administrators or owners can change employee roles.");
+                        return;
+                      }
                       updateMember.mutate(
                         {
                           id: m.id,
                           role,
+                          status: m.status,
                           organization_id: activeOrgId,
                           user_id: m.user_id,
-                          job_title: m.job_title,
+                          job_title: ORG_ROLE_TO_ROLE_NAME[role],
                         },
                         {
                           onSuccess: () =>
                             toast.success(`Role updated to ${ORG_ROLE_TO_ROLE_NAME[role]}`),
                           onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the role"),
                         },
-                      )
-                    }
-                    onStatus={(status) =>
+                      );
+                    }}
+                    onStatus={(status) => {
+                      if (!canManage) {
+                        toast.error("Only administrators or owners can change employee status.");
+                        return;
+                      }
                       updateMember.mutate(
                         {
                           id: m.id,
+                          role: m.role,
                           status,
                           organization_id: activeOrgId,
                           user_id: m.user_id,
-                          job_title: m.job_title,
+                          job_title: m.job_title ?? undefined,
                         },
                         {
-                          onSuccess: () => toast.success("Status updated"),
+                          onSuccess: () => toast.success(`Status updated to ${status}`),
                           onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the status"),
                         },
-                      )
-                    }
+                      );
+                    }}
                   />
                 );
               })}
@@ -398,37 +387,47 @@ function EmployeesPage() {
                         isCurrentUser={!!isSelf}
                         projectCount={projects.filter((p) => p.manager_id === m.user_id).length}
                         taskCount={tasks.filter((t) => t.assignee_id === m.user_id && t.status !== "completed").length}
-                        onRole={(role) =>
+                        onRole={(role) => {
+                          if (!canManage) {
+                            toast.error("Only administrators or owners can change employee roles.");
+                            return;
+                          }
                           updateMember.mutate(
                             {
                               id: m.id,
                               role,
+                              status: m.status,
                               organization_id: activeOrgId,
                               user_id: m.user_id,
-                              job_title: m.job_title,
+                              job_title: ORG_ROLE_TO_ROLE_NAME[role],
                             },
                             {
                               onSuccess: () =>
                                 toast.success(`Role updated to ${ORG_ROLE_TO_ROLE_NAME[role]}`),
                               onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the role"),
                             },
-                          )
-                        }
-                        onStatus={(status) =>
+                          );
+                        }}
+                        onStatus={(status) => {
+                          if (!canManage) {
+                            toast.error("Only administrators or owners can change employee status.");
+                            return;
+                          }
                           updateMember.mutate(
                             {
                               id: m.id,
+                              role: m.role,
                               status,
                               organization_id: activeOrgId,
                               user_id: m.user_id,
-                              job_title: m.job_title,
+                              job_title: m.job_title ?? undefined,
                             },
                             {
-                              onSuccess: () => toast.success("Status updated"),
+                              onSuccess: () => toast.success(`Status updated to ${status}`),
                               onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the status"),
                             },
-                          )
-                        }
+                          );
+                        }}
                       />
                     );
                   })}

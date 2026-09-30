@@ -52,7 +52,7 @@ const MEMBER_STATUSES = ["active", "invited", "disabled"] as const;
 
 function AdminUsersPage() {
   const { user } = useSession();
-  const { currentUser, can } = useWorkspace();
+  const { currentUser, roleName, can } = useWorkspace();
   const { orgs, activeOrgId, activeOrg, setOrgId } = useActiveOrg();
   const { data: members = [], isLoading: isMembersLoading } = useOrgMembers(activeOrgId);
   const { data: allProfiles = [], isLoading: isProfilesLoading } = useAllProfiles();
@@ -61,20 +61,19 @@ function AdminUsersPage() {
   const isLoading = isMembersLoading || isProfilesLoading || isMembershipLoading;
 
   const userReqRole = (user?.user_metadata?.requested_role as string | undefined)?.toLowerCase();
-  const isOwner =
-    membership?.role === "owner" ||
-    activeOrg?.owner_id === user?.id ||
-    userReqRole === "owner" ||
-    currentUser?.role_id === "role_1" ||
-    currentUser?.job_title?.toLowerCase().includes("owner") ||
-    (currentUser as any)?.role === "Organization Owner";
 
-  const isAdmin =
-    membership?.role === "admin" ||
-    userReqRole === "admin" ||
-    currentUser?.role_id === "role_2" ||
-    currentUser?.job_title?.toLowerCase().includes("admin") ||
-    (currentUser as any)?.role === "Admin";
+  const isOwner = user
+    ? membership?.role === "owner" ||
+      activeOrg?.owner_id === user?.id ||
+      userReqRole === "owner" ||
+      roleName === "Organization Owner"
+    : roleName === "Organization Owner";
+
+  const isAdmin = user
+    ? membership?.role === "admin" ||
+      userReqRole === "admin" ||
+      roleName === "Admin"
+    : roleName === "Admin";
 
   // Only admin or owner can manage users, view all user profiles, and remove employee accounts
   const isOwnerOrAdmin = isOwner || isAdmin;
@@ -128,7 +127,6 @@ function AdminUsersPage() {
           status: "active",
           job_title: userJobTitle,
           created_at: user.created_at || new Date().toISOString(),
-          updated_at: new Date().toISOString(),
           profile: {
             id: user.id,
             full_name: (user.user_metadata?.full_name as string) || user.email?.split("@")[0] || "User",
@@ -176,7 +174,6 @@ function AdminUsersPage() {
         status: "active",
         job_title: p.job_title || (pRole === "owner" ? "Workspace Owner" : "Team Member"),
         created_at: p.created_at || new Date().toISOString(),
-        updated_at: p.updated_at || p.created_at || new Date().toISOString(),
         profile: p,
       });
     }
@@ -250,27 +247,39 @@ function AdminUsersPage() {
                     canManage={canManage}
                     canRemove={canRemoveThis}
                     isCurrentUser={!!isSelf}
-                    onRole={(role) =>
+                    onRole={(role) => {
+                      if (!canManage) {
+                        toast.error("Only administrators or owners can change roles.");
+                        return;
+                      }
                       updateMember.mutate(
-                        { id: m.id, role, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
-                        { onSuccess: () => toast.success("Role updated") },
-                      )
-                    }
-                    onStatus={(status) =>
+                        { id: m.id, role, status: m.status, organization_id: activeOrgId, user_id: m.user_id, job_title: ORG_ROLE_TO_ROLE_NAME[role] },
+                        { onSuccess: () => toast.success(`Role updated to ${ORG_ROLE_TO_ROLE_NAME[role]}`) },
+                      );
+                    }}
+                    onStatus={(status) => {
+                      if (!canManage) {
+                        toast.error("Only administrators or owners can change status.");
+                        return;
+                      }
                       updateMember.mutate(
-                        { id: m.id, status, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
-                        { onSuccess: () => toast.success("Status updated") },
-                      )
-                    }
-                    onRemove={() =>
+                        { id: m.id, role: m.role, status, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title ?? undefined },
+                        { onSuccess: () => toast.success(`Status updated to ${status}`) },
+                      );
+                    }}
+                    onRemove={() => {
+                      if (!canManage) {
+                        toast.error("Only administrators or owners can remove members.");
+                        return;
+                      }
                       removeMember.mutate(
                         { id: m.id, organization_id: activeOrgId, user_id: m.user_id },
                         {
                           onSuccess: () => toast.success(`${m.profile?.full_name || "Member"} removed from workspace`),
                           onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to remove member"),
                         },
-                      )
-                    }
+                      );
+                    }}
                   />
                 );
               })}
@@ -301,27 +310,39 @@ function AdminUsersPage() {
                         canManage={canManage}
                         canRemove={canRemoveThis}
                         isCurrentUser={!!isSelf}
-                        onRole={(role) =>
+                        onRole={(role) => {
+                          if (!canManage) {
+                            toast.error("Only administrators or owners can change roles.");
+                            return;
+                          }
                           updateMember.mutate(
-                            { id: m.id, role, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
-                            { onSuccess: () => toast.success("Role updated") },
-                          )
-                        }
-                        onStatus={(status) =>
+                            { id: m.id, role, status: m.status, organization_id: activeOrgId, user_id: m.user_id, job_title: ORG_ROLE_TO_ROLE_NAME[role] },
+                            { onSuccess: () => toast.success(`Role updated to ${ORG_ROLE_TO_ROLE_NAME[role]}`) },
+                          );
+                        }}
+                        onStatus={(status) => {
+                          if (!canManage) {
+                            toast.error("Only administrators or owners can change status.");
+                            return;
+                          }
                           updateMember.mutate(
-                            { id: m.id, status, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
-                            { onSuccess: () => toast.success("Status updated") },
-                          )
-                        }
-                        onRemove={() =>
+                            { id: m.id, role: m.role, status, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title ?? undefined },
+                            { onSuccess: () => toast.success(`Status updated to ${status}`) },
+                          );
+                        }}
+                        onRemove={() => {
+                          if (!canManage) {
+                            toast.error("Only administrators or owners can remove members.");
+                            return;
+                          }
                           removeMember.mutate(
                             { id: m.id, organization_id: activeOrgId, user_id: m.user_id },
                             {
                               onSuccess: () => toast.success(`${m.profile?.full_name || "Member"} removed from workspace`),
                               onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to remove member"),
                             },
-                          )
-                        }
+                          );
+                        }}
                       />
                     );
                   })}
