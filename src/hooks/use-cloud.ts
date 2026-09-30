@@ -489,9 +489,35 @@ export function useUpdateMember() {
 export function useRemoveMember() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("organization_members").delete().eq("id", id);
+    mutationFn: async (input: string | { id: string; organization_id?: string; user_id?: string }) => {
+      const id = typeof input === "string" ? input : input.id;
+      const orgId = typeof input === "object" ? input.organization_id : undefined;
+      const userId = typeof input === "object" ? input.user_id : undefined;
+
+      // If synthetic ID or explicit orgId and userId provided
+      const isSynthetic = id.startsWith("profile_") || id.startsWith("user_") || id.startsWith("store_");
+      const targetUserId = userId || (isSynthetic ? id.replace(/^(profile_|user_|store_)/, "") : undefined);
+
+      if (isSynthetic && orgId && targetUserId) {
+        const { error } = await supabase
+          .from("organization_members")
+          .delete()
+          .eq("organization_id", orgId)
+          .eq("user_id", targetUserId);
+        if (error) throw error;
+        return;
+      }
+
+      const { data, error } = await supabase.from("organization_members").delete().eq("id", id).select();
       if (error) throw error;
+      if ((!data || data.length === 0) && orgId && targetUserId) {
+        const { error: fallbackErr } = await supabase
+          .from("organization_members")
+          .delete()
+          .eq("organization_id", orgId)
+          .eq("user_id", targetUserId);
+        if (fallbackErr) throw fallbackErr;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["cloud"] }),
   });

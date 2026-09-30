@@ -15,7 +15,6 @@ import { fmtDate } from "@/lib/format";
 import { ORG_ROLE_TO_ROLE_NAME, ORG_ROLE_DESCRIPTIONS, ROLE_PERMISSIONS, PERMISSIONS } from "@/lib/permissions";
 import { useActiveOrg } from "@/hooks/use-active-org";
 import { useWorkspace } from "@/app/workspace";
-import { store } from "@/services/store";
 import {
   ORG_ROLES,
   resolveRequestedRole,
@@ -212,58 +211,6 @@ function EmployeesPage() {
         created_at: p.created_at || new Date().toISOString(),
         updated_at: p.updated_at || p.created_at || new Date().toISOString(),
         profile: p,
-      });
-    }
-
-    // 4. Add CRM store users (mock/demo employees) deduplicated by email and name
-    const existingEmails = new Set(
-      Array.from(memberMap.values())
-        .map((m) => (m.profile?.email || "").toLowerCase())
-        .filter(Boolean)
-    );
-    const existingNames = new Set(
-      Array.from(memberMap.values())
-        .map((m) => (m.profile?.full_name || "").toLowerCase())
-        .filter(Boolean)
-    );
-
-    for (const u of store.users) {
-      const email = (u.email || "").toLowerCase();
-      const name = (u.full_name || "").toLowerCase();
-      if (existingEmails.has(email) || existingNames.has(name) || memberMap.has(u.id)) {
-        continue;
-      }
-
-      const uTitle = (u.job_title || "").toLowerCase();
-      const uRole: OrgRole =
-        u.role_id === "role_1" || uTitle.includes("owner")
-          ? "owner"
-          : u.role_id === "role_2" || uTitle.includes("admin")
-          ? "admin"
-          : u.role_id === "role_3" || uTitle.includes("manager") || uTitle.includes("lead")
-          ? "manager"
-          : "member";
-
-      const uStatus = (u.status === "inactive" || u.status === "suspended") ? "disabled" : "active";
-
-      memberMap.set(u.id, {
-        id: `store_${u.id}`,
-        organization_id: activeOrgId || "",
-        user_id: u.id,
-        role: uRole,
-        status: uStatus,
-        job_title: u.job_title || "Team Member",
-        created_at: u.created_at || new Date().toISOString(),
-        updated_at: u.updated_at || new Date().toISOString(),
-        profile: {
-          id: u.id,
-          full_name: u.full_name,
-          email: u.email,
-          avatar_url: u.avatar_url || null,
-          job_title: u.job_title || null,
-          created_at: u.created_at || new Date().toISOString(),
-          updated_at: u.updated_at || new Date().toISOString(),
-        },
       });
     }
 

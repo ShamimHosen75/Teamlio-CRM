@@ -18,7 +18,6 @@ import { fmtDate } from "@/lib/format";
 import { ORG_ROLE_TO_ROLE_NAME } from "@/lib/permissions";
 import { useActiveOrg } from "@/hooks/use-active-org";
 import { useWorkspace } from "@/app/workspace";
-import { store } from "@/services/store";
 import {
   ORG_ROLES,
   resolveRequestedRole,
@@ -77,21 +76,17 @@ function AdminUsersPage() {
     currentUser?.job_title?.toLowerCase().includes("admin") ||
     (currentUser as any)?.role === "Admin";
 
-  const isManager =
-    membership?.role === "manager" ||
-    userReqRole === "manager" ||
-    currentUser?.role_id === "role_3" ||
-    currentUser?.job_title?.toLowerCase().includes("manager") ||
-    currentUser?.job_title?.toLowerCase().includes("lead") ||
-    (currentUser as any)?.role === "Project Manager";
-
-  const isElevatedRole = isOwner || isAdmin || isManager;
-  const canManage = can("user.manage") || isOwner || isAdmin;
+  // Only admin or owner can manage users, view all user profiles, and remove employee accounts
+  const isOwnerOrAdmin = isOwner || isAdmin;
+  const canManage = isOwnerOrAdmin;
 
   const updateMember = useUpdateMember();
   const removeMember = useRemoveMember();
   const cancelInvite = useCancelInvite();
   const pending = invites.filter((i) => !i.accepted_at);
+
+  const currentUserId = user?.id || currentUser?.id;
+  const currentUserEmail = user?.email?.toLowerCase();
 
   const allEmployees = useMemo(() => {
     const memberMap = new Map<string, CloudMember>();
@@ -110,7 +105,7 @@ function AdminUsersPage() {
         (user.user_metadata?.requested_role ? resolveRequestedRole(user.user_metadata?.requested_role).jobTitle : (isOwner ? "Workspace Owner" : "Team Member"));
       const userRole: OrgRole =
         membership?.role ||
-        (activeOrg?.owner_id === user.id ? "owner" : (user.user_metadata?.requested_role?.toLowerCase() as OrgRole) || (isOwner ? "owner" : isAdmin ? "admin" : isManager ? "manager" : "member"));
+        (activeOrg?.owner_id === user.id ? "owner" : (user.user_metadata?.requested_role?.toLowerCase() as OrgRole) || (isOwner ? "owner" : isAdmin ? "admin" : "member"));
 
       if (existing) {
         if (!existing.profile) {
@@ -147,7 +142,7 @@ function AdminUsersPage() {
       }
     }
 
-    // 3. Add all profiles from Supabase database
+    // 3. Add all profiles from Supabase database (real registered accounts)
     for (const p of allProfiles) {
       if (memberMap.has(p.id)) {
         const existing = memberMap.get(p.id)!;
@@ -186,85 +181,28 @@ function AdminUsersPage() {
       });
     }
 
-    // 4. Add CRM store users (mock/demo employees) deduplicated by email and name
-    const existingEmails = new Set(
-      Array.from(memberMap.values())
-        .map((m) => (m.profile?.email || "").toLowerCase())
-        .filter(Boolean)
-    );
-    const existingNames = new Set(
-      Array.from(memberMap.values())
-        .map((m) => (m.profile?.full_name || "").toLowerCase())
-        .filter(Boolean)
-    );
-
-    for (const u of store.users) {
-      const email = (u.email || "").toLowerCase();
-      const name = (u.full_name || "").toLowerCase();
-      if (existingEmails.has(email) || existingNames.has(name) || memberMap.has(u.id)) {
-        continue;
-      }
-
-      const uTitle = (u.job_title || "").toLowerCase();
-      const uRole: OrgRole =
-        u.role_id === "role_1" || uTitle.includes("owner")
-          ? "owner"
-          : u.role_id === "role_2" || uTitle.includes("admin")
-          ? "admin"
-          : u.role_id === "role_3" || uTitle.includes("manager") || uTitle.includes("lead")
-          ? "manager"
-          : "member";
-
-      const uStatus = (u.status === "inactive" || u.status === "suspended") ? "disabled" : "active";
-
-      memberMap.set(u.id, {
-        id: `store_${u.id}`,
-        organization_id: activeOrgId || "",
-        user_id: u.id,
-        role: uRole,
-        status: uStatus,
-        job_title: u.job_title || "Team Member",
-        created_at: u.created_at || new Date().toISOString(),
-        updated_at: u.updated_at || new Date().toISOString(),
-        profile: {
-          id: u.id,
-          full_name: u.full_name,
-          email: u.email,
-          avatar_url: u.avatar_url || null,
-          job_title: u.job_title || null,
-          created_at: u.created_at || new Date().toISOString(),
-          updated_at: u.updated_at || new Date().toISOString(),
-        },
-      });
-    }
-
     return Array.from(memberMap.values());
-  }, [members, user, allProfiles, activeOrgId, isOwner, isAdmin, isManager, membership?.role, activeOrg?.owner_id]);
+  }, [members, user, allProfiles, activeOrgId, isOwner, isAdmin, membership?.role, activeOrg?.owner_id]);
 
-  // Show all employees profile if user role is admin / owner / manager, including user own account.
-  // Otherwise, only show user's own account.
+  // Restriction: Only admin or owner can view all user profiles in user management.
+  // Non-admin / non-owner users cannot see all user profiles.
   const visibleMembers = useMemo(() => {
-    if (isElevatedRole) {
-      return allEmployees;
+    if (!isOwnerOrAdmin) {
+      return [];
     }
+    return allEmployees;
+  }, [allEmployees, isOwnerOrAdmin]);
 
-    // Regular employee / member: show only user's own profile / account
-    if (user?.id) {
-      const self = allEmployees.filter(
-        (m) =>
-          m.user_id === user.id ||
-          (user.email && m.profile?.email?.toLowerCase() === user.email.toLowerCase())
-      );
-      if (self.length > 0) return self;
-    }
-
-    if (currentUser?.id) {
-      const self = allEmployees.filter((m) => m.user_id === currentUser.id);
-      if (self.length > 0) return self;
-    }
-
-    return allEmployees.slice(0, 1);
-  }, [allEmployees, isElevatedRole, user?.id, user?.email, currentUser?.id]);
+  const canRemoveMember = (m: CloudMember) => {
+    if (!isOwnerOrAdmin) return false;
+    // Cannot remove owner
+    if (m.role === "owner") return false;
+    // Cannot remove self
+    if (m.user_id === currentUserId) return false;
+    // Admin cannot remove other admins (only owner can)
+    if (!isOwner && m.role === "admin") return false;
+    return true;
+  };
 
   return (
     <PermissionGuard permission="user.manage" mode="page">
@@ -285,6 +223,11 @@ function AdminUsersPage() {
             title="No workspace yet"
             description="Create an organization from Workspace Admin to start inviting people."
           />
+        ) : !isOwnerOrAdmin ? (
+          <EmptyState
+            title="Access restricted"
+            description="Only workspace administrators and owners have permission to view all user profiles and manage employee accounts."
+          />
         ) : (
           <>
             <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -295,26 +238,42 @@ function AdminUsersPage() {
             </div>
 
             <div className="space-y-3 md:hidden">
-              {visibleMembers.map((m) => (
-                <MemberCard
-                  key={m.id}
-                  member={m}
-                  canManage={canManage}
-                  onRole={(role) =>
-                    updateMember.mutate(
-                      { id: m.id, role, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
-                      { onSuccess: () => toast.success("Role updated") },
-                    )
-                  }
-                  onStatus={(status) =>
-                    updateMember.mutate(
-                      { id: m.id, status, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
-                      { onSuccess: () => toast.success("Status updated") },
-                    )
-                  }
-                  onRemove={() => removeMember.mutate(m.id, { onSuccess: () => toast.success("Member removed") })}
-                />
-              ))}
+              {visibleMembers.map((m) => {
+                const canRemoveThis = canRemoveMember(m);
+                const isSelf =
+                  (currentUserId && m.user_id === currentUserId) ||
+                  (currentUserEmail && m.profile?.email?.toLowerCase() === currentUserEmail);
+                return (
+                  <MemberCard
+                    key={m.id}
+                    member={m}
+                    canManage={canManage}
+                    canRemove={canRemoveThis}
+                    isCurrentUser={!!isSelf}
+                    onRole={(role) =>
+                      updateMember.mutate(
+                        { id: m.id, role, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
+                        { onSuccess: () => toast.success("Role updated") },
+                      )
+                    }
+                    onStatus={(status) =>
+                      updateMember.mutate(
+                        { id: m.id, status, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
+                        { onSuccess: () => toast.success("Status updated") },
+                      )
+                    }
+                    onRemove={() =>
+                      removeMember.mutate(
+                        { id: m.id, organization_id: activeOrgId, user_id: m.user_id },
+                        {
+                          onSuccess: () => toast.success(`${m.profile?.full_name || "Member"} removed from workspace`),
+                          onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to remove member"),
+                        },
+                      )
+                    }
+                  />
+                );
+              })}
             </div>
 
             <section className="surface-card hidden overflow-x-auto md:block">
@@ -330,30 +289,46 @@ function AdminUsersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleMembers.map((m) => (
-                    <MemberRow
-                      key={m.id}
-                      member={m}
-                      canManage={canManage}
-                      onRole={(role) =>
-                        updateMember.mutate(
-                          { id: m.id, role, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
-                          { onSuccess: () => toast.success("Role updated") },
-                        )
-                      }
-                      onStatus={(status) =>
-                        updateMember.mutate(
-                          { id: m.id, status, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
-                          { onSuccess: () => toast.success("Status updated") },
-                        )
-                      }
-                      onRemove={() => removeMember.mutate(m.id, { onSuccess: () => toast.success("Member removed") })}
-                    />
-                  ))}
+                  {visibleMembers.map((m) => {
+                    const canRemoveThis = canRemoveMember(m);
+                    const isSelf =
+                      (currentUserId && m.user_id === currentUserId) ||
+                      (currentUserEmail && m.profile?.email?.toLowerCase() === currentUserEmail);
+                    return (
+                      <MemberRow
+                        key={m.id}
+                        member={m}
+                        canManage={canManage}
+                        canRemove={canRemoveThis}
+                        isCurrentUser={!!isSelf}
+                        onRole={(role) =>
+                          updateMember.mutate(
+                            { id: m.id, role, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
+                            { onSuccess: () => toast.success("Role updated") },
+                          )
+                        }
+                        onStatus={(status) =>
+                          updateMember.mutate(
+                            { id: m.id, status, organization_id: activeOrgId, user_id: m.user_id, job_title: m.job_title },
+                            { onSuccess: () => toast.success("Status updated") },
+                          )
+                        }
+                        onRemove={() =>
+                          removeMember.mutate(
+                            { id: m.id, organization_id: activeOrgId, user_id: m.user_id },
+                            {
+                              onSuccess: () => toast.success(`${m.profile?.full_name || "Member"} removed from workspace`),
+                              onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to remove member"),
+                            },
+                          )
+                        }
+                      />
+                    );
+                  })}
                   {!visibleMembers.length && !isLoading ? (
                     <tr>
                       <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                        No members yet.
+                        No members found in this workspace.
                       </td>
                     </tr>
                   ) : null}
@@ -407,9 +382,19 @@ function AdminUsersPage() {
   );
 }
 
-function MemberCard({ member, canManage, onRole, onStatus, onRemove }: {
+function MemberCard({
+  member,
+  canManage,
+  canRemove,
+  isCurrentUser,
+  onRole,
+  onStatus,
+  onRemove,
+}: {
   member: CloudMember;
   canManage: boolean;
+  canRemove: boolean;
+  isCurrentUser?: boolean;
   onRole: (role: OrgRole) => void;
   onStatus: (status: (typeof MEMBER_STATUSES)[number]) => void;
   onRemove: () => void;
@@ -418,7 +403,16 @@ function MemberCard({ member, canManage, onRole, onStatus, onRemove }: {
   const editable = canManage && member.role !== "owner";
   return (
     <article className="surface-card min-w-0 p-4">
-      <p className="truncate font-medium">{name}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="truncate font-medium flex items-center gap-1.5">
+          {name}
+          {isCurrentUser ? (
+            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal text-muted-foreground">
+              You
+            </Badge>
+          ) : null}
+        </p>
+      </div>
       <p className="truncate text-xs text-muted-foreground">{member.profile?.email ?? "—"}</p>
       <div className="mt-4 grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
         <div><p className="mb-1 text-xs text-muted-foreground">Role</p>{editable ? <Select value={member.role} onValueChange={(v) => onRole(v as OrgRole)}><SelectTrigger aria-label={`Role for ${name}`}><SelectValue /></SelectTrigger><SelectContent>{ORG_ROLES.filter((r) => r !== "owner").map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select> : <Badge variant="secondary">{member.role}</Badge>}</div>
@@ -436,7 +430,20 @@ function MemberCard({ member, canManage, onRole, onStatus, onRemove }: {
               <Check className="mr-1 size-3" /> Approve
             </Button>
           ) : null}
-          {editable ? <ConfirmDialog trigger={<Button variant="ghost" size="sm">Remove</Button>} title={`Remove ${name}?`} description="They lose access to this workspace immediately. You can invite them again later." confirmLabel="Remove" destructive onConfirm={onRemove} /> : null}
+          {canRemove ? (
+            <ConfirmDialog
+              trigger={
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                  Remove
+                </Button>
+              }
+              title={`Remove ${name}?`}
+              description={`Are you sure you want to remove ${name} from this workspace? They will lose access immediately.`}
+              confirmLabel="Remove"
+              destructive
+              onConfirm={onRemove}
+            />
+          ) : null}
         </div>
       </div>
     </article>
@@ -446,12 +453,16 @@ function MemberCard({ member, canManage, onRole, onStatus, onRemove }: {
 function MemberRow({
   member,
   canManage,
+  canRemove,
+  isCurrentUser,
   onRole,
   onStatus,
   onRemove,
 }: {
   member: CloudMember;
   canManage: boolean;
+  canRemove: boolean;
+  isCurrentUser?: boolean;
   onRole: (role: OrgRole) => void;
   onStatus: (status: (typeof MEMBER_STATUSES)[number]) => void;
   onRemove: () => void;
@@ -460,7 +471,14 @@ function MemberRow({
   return (
     <tr className="border-b last:border-0">
       <td className="px-4 py-3">
-        <p className="font-medium">{name}</p>
+        <p className="font-medium flex items-center gap-1.5">
+          {name}
+          {isCurrentUser ? (
+            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal text-muted-foreground">
+              You
+            </Badge>
+          ) : null}
+        </p>
         <p className="text-xs text-muted-foreground">{member.profile?.email ?? "—"}</p>
       </td>
       <td className="px-4 py-3">
@@ -513,15 +531,15 @@ function MemberRow({
       </td>
       <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDate(member.created_at)}</td>
       <td className="px-4 py-3 text-right">
-        {canManage && member.role !== "owner" ? (
+        {canRemove ? (
           <ConfirmDialog
             trigger={
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
                 Remove
               </Button>
             }
             title={`Remove ${name}?`}
-            description="They lose access to this workspace immediately. You can invite them again later."
+            description={`Are you sure you want to remove ${name} from this workspace? They will lose access immediately.`}
             confirmLabel="Remove"
             destructive
             onConfirm={onRemove}
